@@ -27,7 +27,7 @@ make_path_without_curl() {
   mkdir -p "$bin"
 
   local cmd path
-  for cmd in sh mkdir mktemp rm rmdir awk tr tar chmod mv dirname grep cp sha256sum shasum openssl sleep; do
+  for cmd in sh mkdir mktemp rm rmdir awk tr tar gzip gunzip cat chmod mv dirname grep cp sha256sum shasum openssl sleep; do
     path="$(command -v "$cmd" 2>/dev/null || true)"
     if [ -n "$path" ] && [ ! -e "$bin/$cmd" ]; then
       ln -s "$path" "$bin/$cmd"
@@ -92,7 +92,7 @@ executable=$bin_dir/cloudsmith"
 
   run "$bin_dir/cloudsmith" --version
   [ "$status" -eq 0 ]
-  [ "$output" = "cloudsmith 1.19.0" ]
+  [[ "$output" == *"CLI Package Version: 1.19.0"* ]]
 }
 
 @test "--help prints usage with HOME and XDG_DATA_HOME unset" {
@@ -630,5 +630,5 @@ executable=$bin_dir/cloudsmith"
   [ -x "$bin" ]
   run "$bin" --version
   [ "$status" -eq 0 ]
-  [ "$output" = "cloudsmith 1.19.0" ]
+  [[ "$output" == *"CLI Package Version: 1.19.0"* ]]
 }

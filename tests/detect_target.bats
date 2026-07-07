@@ -82,6 +82,11 @@ write_ldd_stub() {
 }
 
 @test "linux/x86_64 with glibc (getconf) is detected as linux-x86_64-gnu" {
+  # The real filesystem probe (/etc/alpine-release, ld-musl) answers before the
+  # getconf stub can, so this scenario is untestable on a musl host.
+  if [ -f /etc/alpine-release ] || ls /lib/ld-musl-*.so.1 >/dev/null 2>&1; then
+    skip "musl host: filesystem probe wins over the getconf stub"
+  fi
   write_uname_stub Linux x86_64
   write_getconf_stub gnu
 
