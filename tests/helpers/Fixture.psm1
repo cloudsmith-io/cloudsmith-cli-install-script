@@ -367,13 +367,19 @@ function Start-FixtureServer {
     Add-Member -InputObject $server -MemberType ScriptMethod -Name Stop -Value {
         if ($this.Stopped) { return }
         $this.Stopped = $true
+        # Stopping the listener makes a blocked GetContext() throw, ending the loop.
         try { $this.Listener.Stop() } catch { }
         try { $this.Listener.Close() } catch { }
-        try { $this.PowerShell.Stop() } catch { }
-        try { [void]$this.PowerShell.EndInvoke($this.AsyncResult) } catch { }
-        try { $this.PowerShell.Dispose() } catch { }
-        try { $this.Runspace.Close() } catch { }
-        try { $this.Runspace.Dispose() } catch { }
+        # Wait bounded; if the loop somehow stays blocked, leak the background
+        # runspace (a daemon thread) rather than deadlock the test run.
+        $finished = $false
+        try { $finished = $this.AsyncResult.AsyncWaitHandle.WaitOne(5000) } catch { }
+        if ($finished) {
+            try { [void]$this.PowerShell.EndInvoke($this.AsyncResult) } catch { }
+            try { $this.PowerShell.Dispose() } catch { }
+            try { $this.Runspace.Close() } catch { }
+            try { $this.Runspace.Dispose() } catch { }
+        }
     }
 
     return $server
