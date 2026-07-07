@@ -254,11 +254,10 @@ function Set-FixtureManifestValue {
     [System.IO.File]::WriteAllLines($ManifestPath, $newLines, $utf8NoBom)
 }
 
-# Starts a loopback-only HTTP file server rooted at -Directory on a free port, serving files as
-# they exist at request time so tests can mutate them (e.g. corrupt the archive) afterward. Uses
-# "localhost" rather than 127.0.0.1 because it's reserved for the current user on Windows, so no
-# admin URL ACL reservation is needed. Returns an object with .Url, .Directory, .Port, and an
-# idempotent .Stop() method.
+# Starts a loopback-only HTTP file server rooted at -Directory on a free port, backed by a
+# python child process (present on all CI runners) so shutdown is a deterministic process kill.
+# Serves files as they exist at request time so tests can mutate them (e.g. corrupt the archive)
+# afterward. Returns an object with .Url, .Directory, .Port, and an idempotent .Stop() method.
 function Start-FixtureServer {
     [CmdletBinding()]
     param(
@@ -269,117 +268,73 @@ function Start-FixtureServer {
         New-Item -ItemType Directory -Path $Directory -Force | Out-Null
     }
 
-    # Find a free loopback port via the classic "bind to port 0" trick.
-    $probe = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
-    $probe.Start()
-    $port = $probe.LocalEndpoint.Port
-    $probe.Stop()
+    $python = Get-Command 'python' -ErrorAction SilentlyContinue
+    if (-not $python) { $python = Get-Command 'python3' -ErrorAction SilentlyContinue }
+    if (-not $python) { throw 'Fixture.psm1: python is required to run the fixture HTTP server' }
 
-    $prefix = "http://localhost:$port/"
-    $listener = New-Object System.Net.HttpListener
-    $listener.Prefixes.Add($prefix)
-    $listener.Start()
+    $id = [Guid]::NewGuid().ToString('N')
+    $portFile = Join-Path ([System.IO.Path]::GetTempPath()) "fixture-port-$id.txt"
+    $scriptPath = Join-Path ([System.IO.Path]::GetTempPath()) "fixture-server-$id.py"
 
-    # A background runspace (not Start-Job) shares process memory, so it sees test file writes directly.
-    $runspace = [runspacefactory]::CreateRunspace()
-    $runspace.Open()
-    $powershell = [System.Management.Automation.PowerShell]::Create()
-    $powershell.Runspace = $runspace
+    $serverScript = @'
+import http.server
+import os
+import socketserver
+import sys
 
-    $serverLoop = {
-        param($listener, $rootDirectory)
+os.chdir(sys.argv[1])
 
-        $rootFull = [System.IO.Path]::GetFullPath($rootDirectory)
 
-        while ($listener.IsListening) {
-            try {
-                $context = $listener.GetContext()
-            }
-            catch {
-                break # Stop()/Close() was called while GetContext() was blocked; expected shutdown.
-            }
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
 
-            $response = $context.Response
-            try {
-                $relative = $context.Request.Url.LocalPath.TrimStart('/')
-                $candidate = Join-Path $rootDirectory $relative
-                $candidateFull = [System.IO.Path]::GetFullPath($candidate)
 
-                if (-not $candidateFull.StartsWith($rootFull, [System.StringComparison]::OrdinalIgnoreCase) -or
-                    -not (Test-Path -LiteralPath $candidateFull -PathType Leaf)) {
-                    $response.StatusCode = 404
-                }
-                else {
-                    $served = $false
-                    $attempts = 0
-                    # Retry briefly on sharing violations: the file may be mid-write from a test.
-                    while (-not $served -and $attempts -lt 40) {
-                        $attempts++
-                        try {
-                            $stream = [System.IO.File]::Open(
-                                $candidateFull,
-                                [System.IO.FileMode]::Open,
-                                [System.IO.FileAccess]::Read,
-                                [System.IO.FileShare]::ReadWrite)
-                            try {
-                                $response.ContentType = "application/octet-stream"
-                                $response.ContentLength64 = $stream.Length
-                                $stream.CopyTo($response.OutputStream)
-                            }
-                            finally {
-                                $stream.Dispose()
-                            }
-                            $served = $true
-                        }
-                        catch [System.IO.IOException] {
-                            Start-Sleep -Milliseconds 50
-                        }
-                    }
-                    if (-not $served) {
-                        $response.StatusCode = 503
-                    }
-                }
-            }
-            catch {
-                try { $response.StatusCode = 500 } catch { }
-            }
-            finally {
-                try { $response.OutputStream.Close() } catch { }
-            }
+httpd = socketserver.TCPServer(("127.0.0.1", 0), Handler)
+with open(sys.argv[2], "w") as f:
+    f.write(str(httpd.server_address[1]))
+httpd.serve_forever()
+'@
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($scriptPath, $serverScript, $utf8NoBom)
+
+    $startArgs = @{
+        FilePath     = $python.Source
+        ArgumentList = @('"' + $scriptPath + '"', '"' + $Directory + '"', '"' + $portFile + '"')
+        PassThru     = $true
+    }
+    if ($env:OS -eq 'Windows_NT') { $startArgs['WindowStyle'] = 'Hidden' }
+    $process = Start-Process @startArgs
+
+    $port = $null
+    for ($i = 0; $i -lt 100; $i++) {
+        if ($process.HasExited) { break }
+        if ((Test-Path -LiteralPath $portFile) -and ($content = Get-Content -LiteralPath $portFile -Raw -ErrorAction SilentlyContinue)) {
+            $port = [int]$content.Trim()
+            break
         }
+        Start-Sleep -Milliseconds 100
+    }
+    if (-not $port) {
+        try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch { }
+        throw 'Fixture.psm1: fixture HTTP server failed to start'
     }
 
-    [void]$powershell.AddScript($serverLoop)
-    [void]$powershell.AddArgument($listener)
-    [void]$powershell.AddArgument($Directory)
-    $asyncResult = $powershell.BeginInvoke()
-
     $server = [PSCustomObject]@{
-        Url       = "http://localhost:$port"
+        Url       = "http://127.0.0.1:$port"
         Directory = $Directory
         Port      = $port
     }
-    Add-Member -InputObject $server -MemberType NoteProperty -Name Listener -Value $listener
-    Add-Member -InputObject $server -MemberType NoteProperty -Name PowerShell -Value $powershell
-    Add-Member -InputObject $server -MemberType NoteProperty -Name Runspace -Value $runspace
-    Add-Member -InputObject $server -MemberType NoteProperty -Name AsyncResult -Value $asyncResult
+    Add-Member -InputObject $server -MemberType NoteProperty -Name Process -Value $process
+    Add-Member -InputObject $server -MemberType NoteProperty -Name PortFile -Value $portFile
+    Add-Member -InputObject $server -MemberType NoteProperty -Name ScriptPath -Value $scriptPath
     Add-Member -InputObject $server -MemberType NoteProperty -Name Stopped -Value $false
     Add-Member -InputObject $server -MemberType ScriptMethod -Name Stop -Value {
         if ($this.Stopped) { return }
         $this.Stopped = $true
-        # Stopping the listener makes a blocked GetContext() throw, ending the loop.
-        try { $this.Listener.Stop() } catch { }
-        try { $this.Listener.Close() } catch { }
-        # Wait bounded; if the loop somehow stays blocked, leak the background
-        # runspace (a daemon thread) rather than deadlock the test run.
-        $finished = $false
-        try { $finished = $this.AsyncResult.AsyncWaitHandle.WaitOne(5000) } catch { }
-        if ($finished) {
-            try { [void]$this.PowerShell.EndInvoke($this.AsyncResult) } catch { }
-            try { $this.PowerShell.Dispose() } catch { }
-            try { $this.Runspace.Close() } catch { }
-            try { $this.Runspace.Dispose() } catch { }
-        }
+        try { Stop-Process -Id $this.Process.Id -Force -ErrorAction SilentlyContinue } catch { }
+        try { Remove-Item -LiteralPath $this.PortFile -Force -ErrorAction SilentlyContinue } catch { }
+        try { Remove-Item -LiteralPath $this.ScriptPath -Force -ErrorAction SilentlyContinue } catch { }
     }
 
     return $server
