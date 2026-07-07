@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create the GitHub Release and upload its assets via `gh`
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify tag is on main
+        run: |
+          set -eu
+          git fetch origin main --quiet
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "refusing to release: $GITHUB_SHA is not an ancestor of origin/main" >&2
+            exit 1
+          fi
+
+      - name: POSIX sh syntax check
+        run: sh -n install.sh
+
+      - name: Install dash
+        run: sudo apt-get update && sudo apt-get install -y dash
+
+      - name: dash syntax check
+        run: dash -n install.sh
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: ShellCheck
+        run: shellcheck --shell=sh --severity=style install.sh
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: Install-Module -Name PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: Invoke-ScriptAnalyzer -Path install.ps1 -Settings PSGallery -EnableExit
+
+      - name: PowerShell AST parse check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("install.ps1", [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) {
+            foreach ($e in $errors) { Write-Error $e }
+            throw "AST parse errors found in install.ps1"
+          }
+
+      - name: Generate SHA256SUMS
+        run: sha256sum install.sh install.ps1 > SHA256SUMS
+
+      - name: Prepare release notes
+        env:
+          TAG: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          {
+            printf 'Cloudsmith CLI installer scripts %s\n\n' "$TAG"
+            printf 'Source repository: %s\n' "$SOURCE_REPO"
+            printf 'Source commit: %s\n\n' "$GITHUB_SHA"
+            printf 'Verify SHA256SUMS against install.sh and install.ps1 before use.\n'
+            printf 'Releases are immutable: assets for this tag do not change after publication.\n'
+          } > RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" install.sh install.ps1 SHA256SUMS \
+            --verify-tag \
+            --notes-file RELEASE_NOTES.md
+
+  vendor:
+    name: Vendor (${{ matrix.repo }})
+    needs: release
+    if: ${{ vars.ENABLE_VENDORING == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      # Only needs to read this repo; PRs against integration repos are
+      # authenticated separately via VENDORING_GITHUB_TOKEN.
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # TODO confirm vendor path with each integration's maintainers.
+          - repo: cloudsmith-io/cloudsmith-cli-action
+            vendor_path: scripts/vendor/
+          - repo: cloudsmith-io/orb
+            vendor_path: scripts/vendor/
+          - repo: cloudsmith-io/cloudsmith-ado-integration
+            vendor_path: scripts/vendor/
+    steps:
+      - name: Checkout installer repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Clone target integration repo
+        env:
+          VENDOR_TOKEN: ${{ secrets.VENDORING_GITHUB_TOKEN }}
+          TARGET_REPO: ${{ matrix.repo }}
+        run: |
+          set -eu
+          git clone --depth 1 "https://x-access-token:${VENDOR_TOKEN}@github.com/${TARGET_REPO}.git" target-repo
+
+      - name: Vendor scripts with provenance header
+        env:
+          TAG: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+          VENDOR_PATH: ${{ matrix.vendor_path }}
+        run: |
+          set -eu
+          mkdir -p "target-repo/${VENDOR_PATH}"
+          for f in install.sh install.ps1; do
+            sha="$(sha256sum "$f" | awk '{print $1}')"
+            first_line="$(head -n1 "$f")"
+            dest="target-repo/${VENDOR_PATH}${f}"
+            {
+              case "$first_line" in
+                '#!'*) printf '%s\n' "$first_line" ;;
+              esac
+              printf '# Vendored from %s\n' "$SOURCE_REPO"
+              printf '# Source tag: %s\n' "$TAG"
+              printf '# Source commit: %s\n' "$GITHUB_SHA"
+              printf '# SHA-256 (pre-vendoring): %s\n' "$sha"
+              printf '# Do not edit directly; update via the source repository and re-vendor.\n'
+              case "$first_line" in
+                '#!'*) tail -n +2 "$f" ;;
+                *) cat "$f" ;;
+              esac
+            } > "$dest"
+          done
+
+      - name: Commit and open vendoring PR
+        env:
+          GH_TOKEN: ${{ secrets.VENDORING_GITHUB_TOKEN }}
+          TARGET_REPO: ${{ matrix.repo }}
+          TAG: ${{ github.ref_name }}
+          SOURCE_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          cd target-repo
+          git config user.name "cloudsmith-installer-bot"
+          git config user.email "engineering@cloudsmith.io"
+          branch="vendor/installer-${TAG}"
+          git checkout -b "$branch"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "no changes to vendor; skipping PR"
+            exit 0
+          fi
+          git commit -m "chore: vendor installer scripts ${TAG} from ${SOURCE_REPO}"
+          git push origin "$branch"
+          gh pr create \
+            --repo "$TARGET_REPO" \
+            --title "chore: vendor installer scripts ${TAG}" \
+            --body "Vendors install.sh/install.ps1 from ${SOURCE_REPO}@${TAG} (commit ${GITHUB_SHA})."

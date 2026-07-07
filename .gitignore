@@ -1,0 +1,7 @@
+.DS_Store
+*.log
+
+# Test artifacts
+tests/tmp/
+tests/output/
+tests/.tmp/
