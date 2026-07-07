@@ -170,7 +170,16 @@ function Invoke-Download {
 
     if ($env:CLOUDSMITH_CLI_ALLOW_INSECURE_URLS -eq "true") {
         Invoke-WithRetry {
-            Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $Destination -TimeoutSec 300 | Out-Null
+            # Windows PowerShell applies wildcard matching to -OutFile, so
+            # download to a temp path and copy to the destination literally.
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $tempFile -TimeoutSec 300 | Out-Null
+                [System.IO.File]::Copy($tempFile, $Destination, $true)
+            }
+            finally {
+                [System.IO.File]::Delete($tempFile)
+            }
         }
         return
     }
@@ -412,7 +421,18 @@ try {
     Write-InstallerLog "downloading Cloudsmith CLI $resolvedVersion"
     Invoke-Download -Uri $archiveUrl -Destination $archiveFile
 
-    $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $archiveFile).Hash.ToLowerInvariant()
+    # Hash via .NET rather than Get-FileHash: concurrent Windows PowerShell
+    # startups can race on the module analysis cache and fail cmdlet discovery.
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $archiveStream = [System.IO.File]::OpenRead($archiveFile)
+    try {
+        $hashBytes = $sha256.ComputeHash($archiveStream)
+    }
+    finally {
+        $archiveStream.Dispose()
+        $sha256.Dispose()
+    }
+    $actualSha256 = ([System.BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant()
     if ($actualSha256 -ne $expectedSha256) {
         throw "install.ps1: archive checksum mismatch"
     }
@@ -443,19 +463,21 @@ try {
     $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
     [IO.File]::WriteAllLines((Join-Path $stagedDirectory ".cloudsmith-installation"), $installationMetadata, $utf8WithoutBom)
 
+    # Directory.Move treats both paths literally; Move-Item -Destination chokes
+    # on wildcard characters like [ ] in the install root.
     $temporaryFinal = Join-Path $finalParent (".cloudsmith.new." + [Guid]::NewGuid().ToString("N"))
     $oldFinal = Join-Path $finalParent (".cloudsmith.old." + [Guid]::NewGuid().ToString("N"))
-    Move-Item -LiteralPath $stagedDirectory -Destination $temporaryFinal
+    [System.IO.Directory]::Move($stagedDirectory, $temporaryFinal)
 
     if (Test-Path -LiteralPath $binDirectory) {
-        Move-Item -LiteralPath $binDirectory -Destination $oldFinal
+        [System.IO.Directory]::Move($binDirectory, $oldFinal)
     }
     try {
-        Move-Item -LiteralPath $temporaryFinal -Destination $binDirectory
+        [System.IO.Directory]::Move($temporaryFinal, $binDirectory)
     }
     catch {
         if (Test-Path -LiteralPath $oldFinal) {
-            Move-Item -LiteralPath $oldFinal -Destination $binDirectory -ErrorAction SilentlyContinue
+            try { [System.IO.Directory]::Move($oldFinal, $binDirectory) } catch { Write-Warning "Failed to restore previous installation directory during rollback: $_" }
         }
         throw
     }

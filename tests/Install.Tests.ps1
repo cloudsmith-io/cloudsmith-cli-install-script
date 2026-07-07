@@ -10,14 +10,11 @@ $script:RunningOnWindows = if ($PSVersionTable.PSVersion.Major -ge 6) { $IsWindo
 Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $script:RunningOnWindows) {
 
     BeforeAll {
-        $script:InstallScriptPath = (Resolve-Path (Join-Path $PSScriptRoot '..' 'install.ps1')).ProviderPath
-        Import-Module (Join-Path $PSScriptRoot 'helpers' 'Fixture.psm1') -Force
+        # Nested Join-Path: the multi-segment form is not available in Windows PowerShell 5.1.
+        $script:InstallScriptPath = (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') 'install.ps1')).ProviderPath
+        Import-Module (Join-Path (Join-Path $PSScriptRoot 'helpers') 'Fixture.psm1') -Force
 
         $script:DefaultTarget = 'windows-x86_64'
-
-        $script:CandidateHosts = @()
-        if (Get-Command 'pwsh' -ErrorAction SilentlyContinue) { $script:CandidateHosts += 'pwsh' }
-        if (Get-Command 'powershell.exe' -ErrorAction SilentlyContinue) { $script:CandidateHosts += 'powershell.exe' }
 
         # Runs install.ps1 as a child process of $HostExe. -EnvironmentOverrides sets env vars for
         # the duration of the call ($null removes one) and restores the previous values afterward.
@@ -37,6 +34,9 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
             }
 
             try {
+                # Windows PowerShell turns redirected native stderr into error records,
+                # which terminate under Pester's ErrorAction Stop; scoped to this function.
+                $ErrorActionPreference = 'Continue'
                 $stdOutLines = @(& $HostExe -NoProfile -NoLogo -ExecutionPolicy Bypass -File $script:InstallScriptPath @ScriptArguments 2> $stdErrPath)
                 $exitCode = $LASTEXITCODE
             }
@@ -108,9 +108,15 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
         )
     }
 
-    foreach ($currentHostExe in $script:CandidateHosts) {
+    # Runs at discovery (BeforeAll has not executed yet); -ForEach carries the
+    # host into the run phase as $currentHostExe.
+    $candidateHosts = @()
+    if (Get-Command 'pwsh' -ErrorAction SilentlyContinue) { $candidateHosts += 'pwsh' }
+    if (Get-Command 'powershell.exe' -ErrorAction SilentlyContinue) { $candidateHosts += 'powershell.exe' }
 
-        Context "Host: $currentHostExe" {
+    foreach ($currentHostExe in $candidateHosts) {
+
+        Context "Host: $currentHostExe" -ForEach @(@{ currentHostExe = $currentHostExe }) {
 
             BeforeEach {
                 $script:FixtureDir = Join-Path $TestDrive ("fixture-" + [Guid]::NewGuid().ToString('N'))
@@ -224,10 +230,10 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
                 )
 
                 $first = Invoke-Installer -HostExe $currentHostExe -ScriptArguments $scriptArgs
-                $first.ExitCode | Should -Be 0
+                $first.ExitCode | Should -Be 0 -Because "stderr: $($first.StdErr)"
 
                 $second = Invoke-Installer -HostExe $currentHostExe -ScriptArguments ($scriptArgs + '-Force')
-                $second.ExitCode | Should -Be 0
+                $second.ExitCode | Should -Be 0 -Because "stderr: $($second.StdErr)"
 
                 $expectedBinDir = Get-BinDirectory -InstallRoot $installRoot -Version '3.2.1' -Target $script:DefaultTarget
                 $expectedExecutable = Join-Path $expectedBinDir 'cloudsmith.exe'
@@ -570,12 +576,17 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
                     -RedirectStandardOutput $out1 -RedirectStandardError $err1
                 $proc2 = Start-Process -FilePath $currentHostExe -ArgumentList $argumentString -NoNewWindow -PassThru `
                     -RedirectStandardOutput $out2 -RedirectStandardError $err2
+                # Cache handles now, or ExitCode is null in Windows PowerShell once the process exits.
+                $null = $proc1.Handle
+                $null = $proc2.Handle
 
                 $proc1.WaitForExit(60000) | Out-Null
                 $proc2.WaitForExit(60000) | Out-Null
 
-                $proc1.ExitCode | Should -Be 0
-                $proc2.ExitCode | Should -Be 0
+                $stderr1 = if (Test-Path -LiteralPath $err1) { Get-Content -Raw -LiteralPath $err1 } else { '' }
+                $stderr2 = if (Test-Path -LiteralPath $err2) { Get-Content -Raw -LiteralPath $err2 } else { '' }
+                $proc1.ExitCode | Should -Be 0 -Because "stderr: $stderr1"
+                $proc2.ExitCode | Should -Be 0 -Because "stderr: $stderr2"
 
                 $expectedExecutable = Join-Path (Get-BinDirectory -InstallRoot $installRoot -Version '7.7.7' -Target $script:DefaultTarget) 'cloudsmith.exe'
                 Test-Path -LiteralPath $expectedExecutable | Should -BeTrue

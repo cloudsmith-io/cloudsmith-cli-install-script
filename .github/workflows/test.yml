@@ -17,9 +17,10 @@ jobs:
   lint-shell:
     name: Lint shell
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -51,9 +52,10 @@ jobs:
   lint-powershell:
     name: Lint PowerShell
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -98,9 +100,10 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -126,6 +129,7 @@ jobs:
   test-shell-musl:
     name: Test shell (musl / alpine)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     container:
       image: alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     steps:
@@ -133,7 +137,7 @@ jobs:
         run: apk add --no-cache git gcompat libstdc++
 
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
@@ -146,33 +150,45 @@ jobs:
   test-powershell:
     name: Test PowerShell
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
 
+      # The suite is written for Pester v5; v6 discovers zero tests, so the
+      # version is pinned and every run fails if nothing was discovered.
       - name: Install Pester
         shell: pwsh
-        run: Install-Module -Name Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck
+        run: Install-Module -Name Pester -MinimumVersion 5.5 -MaximumVersion 5.99 -Force -SkipPublisherCheck
 
       - name: Run Pester (PowerShell 7)
         shell: pwsh
         run: |
+          Import-Module Pester -MinimumVersion 5.5 -MaximumVersion 5.99 -Force
           $config = New-PesterConfiguration
           $config.Run.Path = "tests/Install.Tests.ps1"
           $config.Run.Exit = $true
+          $config.Run.PassThru = $true
           $config.Output.Verbosity = "Detailed"
           $config.Should.ErrorAction = "Stop"
-          Invoke-Pester -Configuration $config
+          $result = Invoke-Pester -Configuration $config
+          if (-not $result -or $result.TotalCount -lt 1) {
+            throw "Pester discovered zero tests"
+          }
 
       - name: Run Pester (Windows PowerShell 5.1)
         shell: powershell
         run: |
-          Import-Module Pester -MinimumVersion 5.5 -Force
+          Import-Module Pester -MinimumVersion 5.5 -MaximumVersion 5.99 -Force
           $config = New-PesterConfiguration
           $config.Run.Path = "tests/Install.Tests.ps1"
           $config.Run.Exit = $true
+          $config.Run.PassThru = $true
           $config.Output.Verbosity = "Detailed"
           $config.Should.ErrorAction = "Stop"
-          Invoke-Pester -Configuration $config
+          $result = Invoke-Pester -Configuration $config
+          if (-not $result -or $result.TotalCount -lt 1) {
+            throw "Pester discovered zero tests"
+          }
