@@ -10,8 +10,9 @@ $script:RunningOnWindows = if ($PSVersionTable.PSVersion.Major -ge 6) { $IsWindo
 Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $script:RunningOnWindows) {
 
     BeforeAll {
-        $script:InstallScriptPath = (Resolve-Path (Join-Path $PSScriptRoot '..' 'install.ps1')).ProviderPath
-        Import-Module (Join-Path $PSScriptRoot 'helpers' 'Fixture.psm1') -Force
+        # Nested Join-Path: the multi-segment form is not available in Windows PowerShell 5.1.
+        $script:InstallScriptPath = (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') 'install.ps1')).ProviderPath
+        Import-Module (Join-Path (Join-Path $PSScriptRoot 'helpers') 'Fixture.psm1') -Force
 
         $script:DefaultTarget = 'windows-x86_64'
 
