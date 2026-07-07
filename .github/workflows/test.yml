@@ -152,27 +152,38 @@ jobs:
         with:
           persist-credentials: false
 
+      # The suite is written for Pester v5; v6 discovers zero tests, so the
+      # version is pinned and every run fails if nothing was discovered.
       - name: Install Pester
         shell: pwsh
-        run: Install-Module -Name Pester -MinimumVersion 5.5 -Force -SkipPublisherCheck
+        run: Install-Module -Name Pester -MinimumVersion 5.5 -MaximumVersion 5.99 -Force -SkipPublisherCheck
 
       - name: Run Pester (PowerShell 7)
         shell: pwsh
         run: |
+          Import-Module Pester -MinimumVersion 5.5 -MaximumVersion 5.99 -Force
           $config = New-PesterConfiguration
           $config.Run.Path = "tests/Install.Tests.ps1"
           $config.Run.Exit = $true
+          $config.Run.PassThru = $true
           $config.Output.Verbosity = "Detailed"
           $config.Should.ErrorAction = "Stop"
-          Invoke-Pester -Configuration $config
+          $result = Invoke-Pester -Configuration $config
+          if (-not $result -or $result.TotalCount -lt 1) {
+            throw "Pester discovered zero tests"
+          }
 
       - name: Run Pester (Windows PowerShell 5.1)
         shell: powershell
         run: |
-          Import-Module Pester -MinimumVersion 5.5 -Force
+          Import-Module Pester -MinimumVersion 5.5 -MaximumVersion 5.99 -Force
           $config = New-PesterConfiguration
           $config.Run.Path = "tests/Install.Tests.ps1"
           $config.Run.Exit = $true
+          $config.Run.PassThru = $true
           $config.Output.Verbosity = "Detailed"
           $config.Should.ErrorAction = "Stop"
-          Invoke-Pester -Configuration $config
+          $result = Invoke-Pester -Configuration $config
+          if (-not $result -or $result.TotalCount -lt 1) {
+            throw "Pester discovered zero tests"
+          }
