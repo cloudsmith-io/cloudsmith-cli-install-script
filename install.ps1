@@ -19,7 +19,8 @@ param(
     ),
     [string]$Target = $env:CLOUDSMITH_CLI_TARGET,
     [string]$OutputFile = $env:CLOUDSMITH_CLI_OUTPUT_FILE,
-    [string]$Repository = $(if ($env:CLOUDSMITH_CLI_REPOSITORY) { $env:CLOUDSMITH_CLI_REPOSITORY } else { "cloudsmith/cli-standalone" }),
+    # TODO: revert to the production repository before release.
+    [string]$Repository = $(if ($env:CLOUDSMITH_CLI_REPOSITORY) { $env:CLOUDSMITH_CLI_REPOSITORY } else { "bart-demo-org-terraform/cli-binary-release-test" }),
     [string]$ManifestUrl = $env:CLOUDSMITH_CLI_MANIFEST_URL,
     [switch]$Force
 )
@@ -265,7 +266,7 @@ function Test-CloudsmithExecutable {
     return $true
 }
 
-function Test-ZipEntries {
+function Test-ZipArchive {
     param([Parameter(Mandatory = $true)][string]$Archive)
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -307,7 +308,7 @@ function Write-InstallResult {
     if ($OutputFile) {
         $parent = Split-Path -Parent $OutputFile
         if ($parent) {
-            New-LiteralDirectory -Path $parent
+            [void][System.IO.Directory]::CreateDirectory($parent)
         }
         $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
         [IO.File]::WriteAllLines($OutputFile, $lines, $utf8WithoutBom)
@@ -315,12 +316,6 @@ function Write-InstallResult {
     else {
         $lines | ForEach-Object { Write-Output $_ }
     }
-}
-
-function New-LiteralDirectory {
-    param([Parameter(Mandatory = $true)][string]$Path)
-
-    [void][System.IO.Directory]::CreateDirectory($Path)
 }
 
 try {
@@ -338,9 +333,9 @@ try {
     Write-InstallerLog "detected target $resolvedTarget"
 
     $temporaryRoot = Join-Path $InstallRoot ".tmp"
-    New-LiteralDirectory -Path $temporaryRoot
+    [void][System.IO.Directory]::CreateDirectory($temporaryRoot)
     $script:WorkDir = Join-Path $temporaryRoot ([Guid]::NewGuid().ToString("N"))
-    New-LiteralDirectory -Path $script:WorkDir
+    [void][System.IO.Directory]::CreateDirectory($script:WorkDir)
 
     $manifestFile = Join-Path $script:WorkDir "manifest.txt"
     if (-not $ManifestUrl) {
@@ -381,7 +376,7 @@ try {
     $binDirectory = Join-Path $finalParent "cloudsmith"
     $executable = Join-Path $binDirectory "cloudsmith.exe"
     $metadataFile = Join-Path $binDirectory ".cloudsmith-installation"
-    New-LiteralDirectory -Path $finalParent
+    [void][System.IO.Directory]::CreateDirectory($finalParent)
 
     $lockPath = Join-Path $finalParent ".install.lock"
     $deadline = [DateTime]::UtcNow.AddSeconds(120)
@@ -426,10 +421,10 @@ try {
     if (-not $archiveName.EndsWith('.zip', [StringComparison]::OrdinalIgnoreCase)) {
         throw "install.ps1: unsupported archive format: $archiveName"
     }
-    Test-ZipEntries -Archive $archiveFile
+    Test-ZipArchive -Archive $archiveFile
 
     $extractDirectory = Join-Path $script:WorkDir "extract"
-    New-LiteralDirectory -Path $extractDirectory
+    [void][System.IO.Directory]::CreateDirectory($extractDirectory)
     [System.IO.Compression.ZipFile]::ExtractToDirectory($archiveFile, $extractDirectory)
 
     $stagedDirectory = Join-Path $extractDirectory "cloudsmith"
