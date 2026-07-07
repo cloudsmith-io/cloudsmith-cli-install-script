@@ -576,6 +576,9 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
                     -RedirectStandardOutput $out1 -RedirectStandardError $err1
                 $proc2 = Start-Process -FilePath $currentHostExe -ArgumentList $argumentString -NoNewWindow -PassThru `
                     -RedirectStandardOutput $out2 -RedirectStandardError $err2
+                # Cache handles now, or ExitCode is null in Windows PowerShell once the process exits.
+                $null = $proc1.Handle
+                $null = $proc2.Handle
 
                 $proc1.WaitForExit(60000) | Out-Null
                 $proc2.WaitForExit(60000) | Out-Null
