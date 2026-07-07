@@ -226,10 +226,10 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
                 )
 
                 $first = Invoke-Installer -HostExe $currentHostExe -ScriptArguments $scriptArgs
-                $first.ExitCode | Should -Be 0
+                $first.ExitCode | Should -Be 0 -Because "stderr: $($first.StdErr)"
 
                 $second = Invoke-Installer -HostExe $currentHostExe -ScriptArguments ($scriptArgs + '-Force')
-                $second.ExitCode | Should -Be 0
+                $second.ExitCode | Should -Be 0 -Because "stderr: $($second.StdErr)"
 
                 $expectedBinDir = Get-BinDirectory -InstallRoot $installRoot -Version '3.2.1' -Target $script:DefaultTarget
                 $expectedExecutable = Join-Path $expectedBinDir 'cloudsmith.exe'
@@ -576,8 +576,10 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
                 $proc1.WaitForExit(60000) | Out-Null
                 $proc2.WaitForExit(60000) | Out-Null
 
-                $proc1.ExitCode | Should -Be 0
-                $proc2.ExitCode | Should -Be 0
+                $stderr1 = if (Test-Path -LiteralPath $err1) { Get-Content -Raw -LiteralPath $err1 } else { '' }
+                $stderr2 = if (Test-Path -LiteralPath $err2) { Get-Content -Raw -LiteralPath $err2 } else { '' }
+                $proc1.ExitCode | Should -Be 0 -Because "stderr: $stderr1"
+                $proc2.ExitCode | Should -Be 0 -Because "stderr: $stderr2"
 
                 $expectedExecutable = Join-Path (Get-BinDirectory -InstallRoot $installRoot -Version '7.7.7' -Target $script:DefaultTarget) 'cloudsmith.exe'
                 Test-Path -LiteralPath $expectedExecutable | Should -BeTrue

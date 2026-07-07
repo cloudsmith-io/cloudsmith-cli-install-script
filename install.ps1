@@ -443,19 +443,21 @@ try {
     $utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
     [IO.File]::WriteAllLines((Join-Path $stagedDirectory ".cloudsmith-installation"), $installationMetadata, $utf8WithoutBom)
 
+    # Directory.Move treats both paths literally; Move-Item -Destination chokes
+    # on wildcard characters like [ ] in the install root.
     $temporaryFinal = Join-Path $finalParent (".cloudsmith.new." + [Guid]::NewGuid().ToString("N"))
     $oldFinal = Join-Path $finalParent (".cloudsmith.old." + [Guid]::NewGuid().ToString("N"))
-    Move-Item -LiteralPath $stagedDirectory -Destination $temporaryFinal
+    [System.IO.Directory]::Move($stagedDirectory, $temporaryFinal)
 
     if (Test-Path -LiteralPath $binDirectory) {
-        Move-Item -LiteralPath $binDirectory -Destination $oldFinal
+        [System.IO.Directory]::Move($binDirectory, $oldFinal)
     }
     try {
-        Move-Item -LiteralPath $temporaryFinal -Destination $binDirectory
+        [System.IO.Directory]::Move($temporaryFinal, $binDirectory)
     }
     catch {
         if (Test-Path -LiteralPath $oldFinal) {
-            Move-Item -LiteralPath $oldFinal -Destination $binDirectory -ErrorAction SilentlyContinue
+            try { [System.IO.Directory]::Move($oldFinal, $binDirectory) } catch { }
         }
         throw
     }
