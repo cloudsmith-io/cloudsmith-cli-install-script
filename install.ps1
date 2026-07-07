@@ -457,7 +457,7 @@ try {
     }
     catch {
         if (Test-Path -LiteralPath $oldFinal) {
-            try { [System.IO.Directory]::Move($oldFinal, $binDirectory) } catch { }
+            try { [System.IO.Directory]::Move($oldFinal, $binDirectory) } catch { Write-Warning "Failed to restore previous installation directory during rollback: $_" }
         }
         throw
     }
