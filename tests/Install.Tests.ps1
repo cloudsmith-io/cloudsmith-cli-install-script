@@ -34,6 +34,9 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
             }
 
             try {
+                # Windows PowerShell turns redirected native stderr into error records,
+                # which terminate under Pester's ErrorAction Stop; scoped to this function.
+                $ErrorActionPreference = 'Continue'
                 $stdOutLines = @(& $HostExe -NoProfile -NoLogo -ExecutionPolicy Bypass -File $script:InstallScriptPath @ScriptArguments 2> $stdErrPath)
                 $exitCode = $LASTEXITCODE
             }
