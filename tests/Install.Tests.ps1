@@ -15,10 +15,6 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
 
         $script:DefaultTarget = 'windows-x86_64'
 
-        $script:CandidateHosts = @()
-        if (Get-Command 'pwsh' -ErrorAction SilentlyContinue) { $script:CandidateHosts += 'pwsh' }
-        if (Get-Command 'powershell.exe' -ErrorAction SilentlyContinue) { $script:CandidateHosts += 'powershell.exe' }
-
         # Runs install.ps1 as a child process of $HostExe. -EnvironmentOverrides sets env vars for
         # the duration of the call ($null removes one) and restores the previous values afterward.
         function Invoke-Installer {
@@ -108,9 +104,15 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
         )
     }
 
-    foreach ($currentHostExe in $script:CandidateHosts) {
+    # Runs at discovery (BeforeAll has not executed yet); -ForEach carries the
+    # host into the run phase as $currentHostExe.
+    $candidateHosts = @()
+    if (Get-Command 'pwsh' -ErrorAction SilentlyContinue) { $candidateHosts += 'pwsh' }
+    if (Get-Command 'powershell.exe' -ErrorAction SilentlyContinue) { $candidateHosts += 'powershell.exe' }
 
-        Context "Host: $currentHostExe" {
+    foreach ($currentHostExe in $candidateHosts) {
+
+        Context "Host: $currentHostExe" -ForEach @(@{ currentHostExe = $currentHostExe }) {
 
             BeforeEach {
                 $script:FixtureDir = Join-Path $TestDrive ("fixture-" + [Guid]::NewGuid().ToString('N'))
