@@ -170,7 +170,16 @@ function Invoke-Download {
 
     if ($env:CLOUDSMITH_CLI_ALLOW_INSECURE_URLS -eq "true") {
         Invoke-WithRetry {
-            Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $Destination -TimeoutSec 300 | Out-Null
+            # Windows PowerShell applies wildcard matching to -OutFile, so
+            # download to a temp path and copy to the destination literally.
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            try {
+                Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $tempFile -TimeoutSec 300 | Out-Null
+                [System.IO.File]::Copy($tempFile, $Destination, $true)
+            }
+            finally {
+                [System.IO.File]::Delete($tempFile)
+            }
         }
         return
     }
@@ -412,7 +421,18 @@ try {
     Write-InstallerLog "downloading Cloudsmith CLI $resolvedVersion"
     Invoke-Download -Uri $archiveUrl -Destination $archiveFile
 
-    $actualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $archiveFile).Hash.ToLowerInvariant()
+    # Hash via .NET rather than Get-FileHash: concurrent Windows PowerShell
+    # startups can race on the module analysis cache and fail cmdlet discovery.
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    $archiveStream = [System.IO.File]::OpenRead($archiveFile)
+    try {
+        $hashBytes = $sha256.ComputeHash($archiveStream)
+    }
+    finally {
+        $archiveStream.Dispose()
+        $sha256.Dispose()
+    }
+    $actualSha256 = ([System.BitConverter]::ToString($hashBytes) -replace '-', '').ToLowerInvariant()
     if ($actualSha256 -ne $expectedSha256) {
         throw "install.ps1: archive checksum mismatch"
     }
