@@ -7,5 +7,5 @@ contact_links:
     url: https://docs.cloudsmith.com/developer-tools/cli
     about: Check the official Cloudsmith CLI documentation
   - name: Cloudsmith Support
-    url: https://cloudsmith.io/support/
+    url: https://support.cloudsmith.com/hc/en-us/requests/new
     about: Contact Cloudsmith support for account-specific issues
