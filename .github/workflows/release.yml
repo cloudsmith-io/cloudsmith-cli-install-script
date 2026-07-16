@@ -108,13 +108,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # TODO confirm vendor path with each integration's maintainers.
           - repo: cloudsmith-io/cloudsmith-cli-action
-            vendor_path: scripts/vendor/
+            integration: github-action
           - repo: cloudsmith-io/orb
-            vendor_path: scripts/vendor/
+            integration: circleci-orb
           - repo: cloudsmith-io/cloudsmith-ado-integration
-            vendor_path: scripts/vendor/
+            integration: azure-devops
     steps:
       - name: Checkout installer repo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -129,33 +128,75 @@ jobs:
           set -eu
           git clone --depth 1 "https://x-access-token:${VENDOR_TOKEN}@github.com/${TARGET_REPO}.git" target-repo
 
-      - name: Vendor scripts with provenance header
+      - name: Vendor release assets
         env:
+          INTEGRATION: ${{ matrix.integration }}
           TAG: ${{ github.ref_name }}
-          SOURCE_REPO: ${{ github.repository }}
-          VENDOR_PATH: ${{ matrix.vendor_path }}
         run: |
           set -eu
-          mkdir -p "target-repo/${VENDOR_PATH}"
-          for f in install.sh install.ps1; do
-            sha="$(sha256sum "$f" | awk '{print $1}')"
-            first_line="$(head -n1 "$f")"
-            dest="target-repo/${VENDOR_PATH}${f}"
-            {
-              case "$first_line" in
-                '#!'*) printf '%s\n' "$first_line" ;;
-              esac
-              printf '# Vendored from %s\n' "$SOURCE_REPO"
-              printf '# Source tag: %s\n' "$TAG"
-              printf '# Source commit: %s\n' "$GITHUB_SHA"
-              printf '# SHA-256 (pre-vendoring): %s\n' "$sha"
-              printf '# Do not edit directly; update via the source repository and re-vendor.\n'
-              case "$first_line" in
-                '#!'*) tail -n +2 "$f" ;;
-                *) cat "$f" ;;
-              esac
-            } > "$dest"
-          done
+          case "$INTEGRATION" in
+            github-action)
+              destination="target-repo/installer"
+              mkdir -p "$destination"
+              cp install.sh install.ps1 "$destination/"
+              printf '%s\n' "$TAG" > "$destination/VERSION"
+              (
+                cd "$destination"
+                sha256sum install.sh install.ps1 > SHA256SUMS
+              )
+              ;;
+            circleci-orb)
+              destination="target-repo/src/scripts"
+              mkdir -p "$destination"
+              cp install.sh "$destination/install.sh"
+              sha="$(sha256sum install.sh | awk '{print $1}')"
+              printf 'version=%s\nsha256=%s\n' "$TAG" "$sha" \
+                > "$destination/install.sh.version"
+              ;;
+            azure-devops)
+              destination="target-repo/cloudsmith-task/installer"
+              mkdir -p "$destination"
+              cp install.sh install.ps1 "$destination/"
+              printf '%s\n' "$TAG" > "$destination/VERSION"
+              ;;
+            *)
+              echo "unsupported integration: $INTEGRATION" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Verify vendored files
+        env:
+          INTEGRATION: ${{ matrix.integration }}
+        run: |
+          set -eu
+          case "$INTEGRATION" in
+            github-action)
+              destination="target-repo/installer"
+              cmp install.sh "$destination/install.sh"
+              cmp install.ps1 "$destination/install.ps1"
+              test -s "$destination/VERSION"
+              (cd "$destination" && sha256sum -c SHA256SUMS)
+              ;;
+            circleci-orb)
+              destination="target-repo/src/scripts"
+              cmp install.sh "$destination/install.sh"
+              expected="$(awk -F= '$1 == "sha256" {print $2}' "$destination/install.sh.version")"
+              actual="$(sha256sum install.sh | awk '{print $1}')"
+              test -n "$(awk -F= '$1 == "version" {print $2}' "$destination/install.sh.version")"
+              test "$expected" = "$actual"
+              ;;
+            azure-devops)
+              destination="target-repo/cloudsmith-task/installer"
+              cmp install.sh "$destination/install.sh"
+              cmp install.ps1 "$destination/install.ps1"
+              test -s "$destination/VERSION"
+              ;;
+            *)
+              echo "unsupported integration: $INTEGRATION" >&2
+              exit 1
+              ;;
+          esac
 
       - name: Commit and open vendoring PR
         env:

@@ -27,5 +27,13 @@ labels: bug
 
 - **OS**: <!-- e.g., macOS 14.0, Ubuntu 22.04, Alpine 3.20, Windows 11 -->
 - **Script**: <!-- install.sh or install.ps1, and its release version -->
+- **CLI version requested**: <!-- e.g., latest or 1.19.0 -->
 - **Shell**: <!-- e.g., bash 5.2, dash, PowerShell 7.4, Windows PowerShell 5.1 -->
 - **CI system (if any)**: <!-- e.g., GitHub Actions, CircleCI, Azure DevOps -->
+
+## Additional Context
+
+<!--
+Include the exact command with secrets removed and any relevant stderr output.
+Do not include Cloudsmith API keys, tokens, credentials, or private URLs.
+-->
