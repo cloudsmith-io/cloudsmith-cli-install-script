@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
   contents: read
@@ -217,7 +217,15 @@ jobs:
             exit 0
           fi
           git commit -m "chore: vendor installer scripts ${TAG} from ${SOURCE_REPO}"
-          git push origin "$branch"
+          # Fetch first so --force-with-lease has a remote-tracking ref to
+          # compare against when a previous run already pushed this branch;
+          # the explicit refspec is needed because the clone is single-branch.
+          git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch" 2>/dev/null || true
+          git push --force-with-lease origin "$branch"
+          if [ -n "$(gh pr list --repo "$TARGET_REPO" --head "$branch" --json number --jq '.[].number')" ]; then
+            echo "vendoring PR for $branch already exists; skipping creation"
+            exit 0
+          fi
           gh pr create \
             --repo "$TARGET_REPO" \
             --title "chore: vendor installer scripts ${TAG}" \

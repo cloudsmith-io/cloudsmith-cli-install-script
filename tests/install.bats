@@ -604,6 +604,29 @@ executable=$bin_dir/cloudsmith"
   [ -x "$final_parent/cloudsmith/cloudsmith" ]
 }
 
+@test "a waiter that dies does not remove another installer's lock" {
+  build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
+  local final_parent="$INSTALL_ROOT/1.19.0/$TEST_TARGET"
+  mkdir -p "$final_parent/.install.lock"
+
+  "$INSTALL_SH" \
+    --version 1.19.0 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$FIXTURE_URL/manifest.txt" \
+    >"$BATS_TEST_TMPDIR/bg.out" 2>"$BATS_TEST_TMPDIR/bg.err" &
+  local bg_pid=$!
+
+  sleep 2
+  kill -TERM "$bg_pid"
+
+  local bg_status=0
+  wait "$bg_pid" || bg_status=$?
+
+  [ "$bg_status" -ne 0 ]
+  [ -d "$final_parent/.install.lock" ]
+}
+
 @test "concurrent installs of the same version both succeed" {
   build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
 
