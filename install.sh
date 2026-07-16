@@ -217,15 +217,18 @@ prepare_destination() {
   BIN_DIR="$FINAL_PARENT/cloudsmith"
   case "$TARGET" in windows-*) BIN="$BIN_DIR/cloudsmith.exe" ;; *) BIN="$BIN_DIR/cloudsmith" ;; esac
   METADATA_FILE="$BIN_DIR/.cloudsmith-installation"
-  LOCK_DIR="$FINAL_PARENT/.install.lock"
+  lock_dir="$FINAL_PARENT/.install.lock"
   mkdir -p "$FINAL_PARENT"
 
   waited=0
-  until mkdir "$LOCK_DIR" 2>/dev/null; do
-    [ "$waited" -lt 120 ] || die "timed out waiting for installation lock: $LOCK_DIR"
+  until mkdir "$lock_dir" 2>/dev/null; do
+    [ "$waited" -lt 120 ] || die "timed out waiting for installation lock: $lock_dir"
     sleep 1
     waited=$((waited + 1))
   done
+  # Track the lock for cleanup only once this process owns it, so a waiter
+  # that dies never releases another installer's lock.
+  LOCK_DIR="$lock_dir"
 }
 
 reuse_existing_install() {
