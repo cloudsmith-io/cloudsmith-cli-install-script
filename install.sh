@@ -86,6 +86,11 @@ cleanup() {
   [ -z "$WORK_DIR" ] || rm -rf "$WORK_DIR"
 }
 
+enable_signal_traps() {
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+}
+
 require_https() {
   # Args: <url> <label>
   case "$1" in https://*) return 0 ;; esac
@@ -221,14 +226,26 @@ prepare_destination() {
   mkdir -p "$FINAL_PARENT"
 
   waited=0
-  until mkdir "$lock_dir" 2>/dev/null; do
+  while :; do
+    pending_signal_status=0
+    trap 'pending_signal_status=130' INT
+    trap 'pending_signal_status=143' TERM
+
+    # Defer cancellation until ownership is known. The subshell prevents a
+    # process-group signal from killing mkdir after it creates the lock.
+    if (trap '' INT TERM; CLOUDSMITH_CLI_LOCK_OWNER_PID=$$ mkdir "$lock_dir") 2>/dev/null; then
+      LOCK_DIR="$lock_dir"
+      enable_signal_traps
+      [ "$pending_signal_status" -eq 0 ] || exit "$pending_signal_status"
+      break
+    fi
+    enable_signal_traps
+    [ "$pending_signal_status" -eq 0 ] || exit "$pending_signal_status"
+
     [ "$waited" -lt 120 ] || die "timed out waiting for installation lock: $lock_dir"
     sleep 1
     waited=$((waited + 1))
   done
-  # Track the lock for cleanup only once this process owns it, so a waiter
-  # that dies never releases another installer's lock.
-  LOCK_DIR="$lock_dir"
 }
 
 reuse_existing_install() {
@@ -373,8 +390,7 @@ main() {
 }
 
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+enable_signal_traps
 
 parse_args "$@"
 set_default_install_root
