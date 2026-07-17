@@ -627,6 +627,46 @@ executable=$bin_dir/cloudsmith"
   [ -d "$final_parent/.install.lock" ]
 }
 
+@test "a signal during lock acquisition does not leave a stale lock" {
+  build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
+  local final_parent="$INSTALL_ROOT/1.19.0/$TEST_TARGET"
+  local shim_dir="$BATS_TEST_TMPDIR/signal-mkdir"
+  local signal_marker="$BATS_TEST_TMPDIR/mkdir-sent-signal"
+  mkdir -p "$shim_dir"
+
+  cat > "$shim_dir/mkdir" <<'EOF'
+#!/usr/bin/env sh
+"$REAL_MKDIR" "$@"
+status=$?
+last_arg=
+for arg do last_arg="$arg"; done
+if [ "$status" -eq 0 ]; then
+  case "$last_arg" in
+    */.install.lock)
+      : > "$MKDIR_SIGNAL_MARKER"
+      kill -TERM "$PPID"
+      ;;
+  esac
+fi
+exit "$status"
+EOF
+  chmod +x "$shim_dir/mkdir"
+
+  run --separate-stderr env \
+    PATH="$shim_dir:$PATH" \
+    REAL_MKDIR="$(command -v mkdir)" \
+    MKDIR_SIGNAL_MARKER="$signal_marker" \
+    "$INSTALL_SH" \
+    --version 1.19.0 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$FIXTURE_URL/manifest.txt"
+
+  [ "$status" -eq 0 ]
+  [ -f "$signal_marker" ]
+  [ ! -e "$final_parent/.install.lock" ]
+}
+
 @test "concurrent installs of the same version both succeed" {
   build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
 

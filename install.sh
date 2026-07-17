@@ -86,6 +86,11 @@ cleanup() {
   [ -z "$WORK_DIR" ] || rm -rf "$WORK_DIR"
 }
 
+enable_signal_traps() {
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+}
+
 require_https() {
   # Args: <url> <label>
   case "$1" in https://*) return 0 ;; esac
@@ -221,14 +226,21 @@ prepare_destination() {
   mkdir -p "$FINAL_PARENT"
 
   waited=0
-  until mkdir "$lock_dir" 2>/dev/null; do
+  while :; do
+    # Keep acquisition and ownership recording indivisible to signal cleanup.
+    # Ignoring the signals here also protects the external mkdir process.
+    trap '' INT TERM
+    if mkdir "$lock_dir" 2>/dev/null; then
+      LOCK_DIR="$lock_dir"
+      enable_signal_traps
+      break
+    fi
+    enable_signal_traps
+
     [ "$waited" -lt 120 ] || die "timed out waiting for installation lock: $lock_dir"
     sleep 1
     waited=$((waited + 1))
   done
-  # Track the lock for cleanup only once this process owns it, so a waiter
-  # that dies never releases another installer's lock.
-  LOCK_DIR="$lock_dir"
 }
 
 reuse_existing_install() {
@@ -373,8 +385,7 @@ main() {
 }
 
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+enable_signal_traps
 
 parse_args "$@"
 set_default_install_root
