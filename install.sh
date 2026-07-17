@@ -227,15 +227,20 @@ prepare_destination() {
 
   waited=0
   while :; do
-    # Keep acquisition and ownership recording indivisible to signal cleanup.
-    # Ignoring the signals here also protects the external mkdir process.
-    trap '' INT TERM
-    if mkdir "$lock_dir" 2>/dev/null; then
+    pending_signal_status=0
+    trap 'pending_signal_status=130' INT
+    trap 'pending_signal_status=143' TERM
+
+    # Defer cancellation until ownership is known. The subshell prevents a
+    # process-group signal from killing mkdir after it creates the lock.
+    if (trap '' INT TERM; CLOUDSMITH_CLI_LOCK_OWNER_PID=$$ mkdir "$lock_dir") 2>/dev/null; then
       LOCK_DIR="$lock_dir"
       enable_signal_traps
+      [ "$pending_signal_status" -eq 0 ] || exit "$pending_signal_status"
       break
     fi
     enable_signal_traps
+    [ "$pending_signal_status" -eq 0 ] || exit "$pending_signal_status"
 
     [ "$waited" -lt 120 ] || die "timed out waiting for installation lock: $lock_dir"
     sleep 1

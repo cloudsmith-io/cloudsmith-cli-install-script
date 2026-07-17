@@ -627,7 +627,7 @@ executable=$bin_dir/cloudsmith"
   [ -d "$final_parent/.install.lock" ]
 }
 
-@test "a signal during lock acquisition does not leave a stale lock" {
+@test "a signal during lock acquisition exits without leaving a stale lock" {
   build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
   local final_parent="$INSTALL_ROOT/1.19.0/$TEST_TARGET"
   local shim_dir="$BATS_TEST_TMPDIR/signal-mkdir"
@@ -635,7 +635,7 @@ executable=$bin_dir/cloudsmith"
   mkdir -p "$shim_dir"
 
   cat > "$shim_dir/mkdir" <<'EOF'
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 "$REAL_MKDIR" "$@"
 status=$?
 last_arg=
@@ -644,7 +644,7 @@ if [ "$status" -eq 0 ]; then
   case "$last_arg" in
     */.install.lock)
       : > "$MKDIR_SIGNAL_MARKER"
-      kill -TERM "$PPID"
+      kill -TERM "$CLOUDSMITH_CLI_LOCK_OWNER_PID"
       ;;
   esac
 fi
@@ -662,9 +662,10 @@ EOF
     --install-root "$INSTALL_ROOT" \
     --manifest-url "$FIXTURE_URL/manifest.txt"
 
-  [ "$status" -eq 0 ]
+  [ "$status" -eq 143 ]
   [ -f "$signal_marker" ]
   [ ! -e "$final_parent/.install.lock" ]
+  [ ! -e "$final_parent/cloudsmith/cloudsmith" ]
 }
 
 @test "concurrent installs of the same version both succeed" {
