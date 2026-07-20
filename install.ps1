@@ -32,6 +32,7 @@ $ProgressPreference = "SilentlyContinue"
 # construction entirely.
 $DownloadBaseUrl = "https://dl.cloudsmith.io/public"
 $ManifestNamePrefix = "cloudsmith-cli-manifest"
+$script:InstallerUserAgent = "cloudsmith-cli-install-script"
 
 $script:WorkDir = $null
 $script:LockStream = $null
@@ -87,6 +88,17 @@ function Resolve-DownloadRedirect {
     return $nextUri.AbsoluteUri
 }
 
+function Get-InstallerWebRequest {
+    param([Parameter(Mandatory = $true)][string]$Uri)
+
+    $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($Uri)
+    $request.AllowAutoRedirect = $false
+    $request.UserAgent = $script:InstallerUserAgent
+    $request.Timeout = 300000
+    $request.ReadWriteTimeout = 300000
+    return $request
+}
+
 function Invoke-HttpsDownload {
     param(
         [Parameter(Mandatory = $true)][string]$Uri,
@@ -99,10 +111,7 @@ function Invoke-HttpsDownload {
     while ($true) {
         Test-DownloadUriAllowed -Uri $currentUri
 
-        $request = [System.Net.HttpWebRequest][System.Net.WebRequest]::Create($currentUri)
-        $request.AllowAutoRedirect = $false
-        $request.Timeout = 300000
-        $request.ReadWriteTimeout = 300000
+        $request = Get-InstallerWebRequest -Uri $currentUri
 
         $response = $null
         try {
@@ -173,7 +182,8 @@ function Invoke-Download {
             # download to a temp path and copy to the destination literally.
             $tempFile = [System.IO.Path]::GetTempFileName()
             try {
-                Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $tempFile -TimeoutSec 300 | Out-Null
+                Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $tempFile `
+                    -TimeoutSec 300 -UserAgent $script:InstallerUserAgent | Out-Null
                 [System.IO.File]::Copy($tempFile, $Destination, $true)
             }
             finally {

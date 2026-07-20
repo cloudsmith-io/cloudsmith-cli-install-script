@@ -147,7 +147,8 @@ The installers apply the following safeguards:
 
 The shell installer uses `curl` or `wget`; the PowerShell installer uses the
 .NET web request stack. Standard proxy configuration and operating-system
-certificate trust stores apply.
+certificate trust stores apply. All installer download requests use
+`cloudsmith-cli-install-script` user agent.
 
 To report a potential vulnerability, follow the [security policy](SECURITY.md)
 instead of opening a public issue.

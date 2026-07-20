@@ -7,6 +7,45 @@
 # $IsWindows doesn't exist in Windows PowerShell 5.1, which is always Windows.
 $script:RunningOnWindows = if ($PSVersionTable.PSVersion.Major -ge 6) { $IsWindows } else { $true }
 
+Describe 'Cloudsmith CLI installer request metadata' {
+
+    BeforeAll {
+        $installScriptPath = (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') 'install.ps1')).ProviderPath
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            $installScriptPath,
+            [ref]$tokens,
+            [ref]$errors
+        )
+        if ($errors.Count -gt 0) {
+            throw 'install.ps1 has parse errors'
+        }
+
+        $requestFunction = $ast.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Get-InstallerWebRequest'
+        }, $true)
+        if (-not $requestFunction) {
+            throw 'unable to find Get-InstallerWebRequest'
+        }
+
+        $script:InstallerUserAgent = 'cloudsmith-cli-install-script'
+        . ([scriptblock]::Create($requestFunction.Extent.Text))
+    }
+
+    It 'sets the stable user agent on secure web requests' {
+        $request = Get-InstallerWebRequest -Uri 'https://downloads.example.test/archive.zip'
+        try {
+            $request.UserAgent | Should -Be 'cloudsmith-cli-install-script'
+        }
+        finally {
+            $request.Abort()
+        }
+    }
+}
+
 Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $script:RunningOnWindows) {
 
     BeforeAll {
@@ -160,6 +199,24 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
 
                 & $expectedExecutable --version
                 $LASTEXITCODE | Should -Be 0
+            }
+
+            It 'identifies PowerShell installer requests with a custom user agent' {
+                $installRoot = Join-Path $TestDrive ("root-" + [Guid]::NewGuid().ToString('N'))
+                $fixture = New-CloudsmithFixture -Directory $script:FixtureDir -Version '1.2.3' -Target $script:DefaultTarget -BaseUrl $script:Server.Url
+
+                $result = Invoke-Installer -HostExe $currentHostExe -ScriptArguments @(
+                    '-Version', '1.2.3',
+                    '-InstallRoot', $installRoot,
+                    '-Target', $script:DefaultTarget,
+                    '-ManifestUrl', $fixture.ManifestUrl
+                )
+
+                $result.ExitCode | Should -Be 0
+                $userAgentRequests = @(Get-Content -LiteralPath $script:Server.LogPath | Where-Object {
+                    $_ -eq 'User-Agent: cloudsmith-cli-install-script'
+                })
+                $userAgentRequests.Count | Should -Be 2
             }
 
             It "resolves 'latest' to the version reported in the manifest" {
