@@ -37,6 +37,36 @@ make_path_without_curl() {
   printf '%s\n' "$bin"
 }
 
+make_path_without_tar() {
+  local bin="$BATS_TEST_TMPDIR/path-without-tar"
+  mkdir -p "$bin"
+
+  local cmd path
+  for cmd in sh mkdir mktemp rm rmdir awk tr gzip gunzip cat chmod mv dirname grep cp sha256sum shasum openssl sleep curl wget; do
+    path="$(command -v "$cmd" 2>/dev/null || true)"
+    if [ -n "$path" ] && [ ! -e "$bin/$cmd" ]; then
+      ln -s "$path" "$bin/$cmd"
+    fi
+  done
+
+  printf '%s\n' "$bin"
+}
+
+make_path_without_checksum_tool() {
+  local bin="$BATS_TEST_TMPDIR/path-without-checksum-tool"
+  mkdir -p "$bin"
+
+  local cmd path
+  for cmd in sh mkdir mktemp rm rmdir awk tr tar gzip gunzip cat chmod mv dirname grep cp sleep curl wget; do
+    path="$(command -v "$cmd" 2>/dev/null || true)"
+    if [ -n "$path" ] && [ ! -e "$bin/$cmd" ]; then
+      ln -s "$path" "$bin/$cmd"
+    fi
+  done
+
+  printf '%s\n' "$bin"
+}
+
 write_busybox_wget_stub() {
   local bin="$1"
   cat > "$bin/wget" <<'EOF'
@@ -466,6 +496,46 @@ executable=$bin_dir/cloudsmith"
   [ "$status" -ne 0 ]
   [[ "$stderr" == *"did not report CLI version 1.19.0"* ]]
   [ ! -e "$INSTALL_ROOT/1.19.0/$TEST_TARGET/cloudsmith/cloudsmith" ]
+}
+
+@test "missing tar fails before the release archive is downloaded" {
+  build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
+  local restricted_path archive_name
+  restricted_path="$(make_path_without_tar)"
+  archive_name="$(fixture_archive_name "1.19.0" "$TEST_TARGET")"
+
+  run --separate-stderr env PATH="$restricted_path" \
+    CLOUDSMITH_CLI_ALLOW_INSECURE_URLS=true \
+    "$INSTALL_SH" \
+    --version 1.19.0 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$FIXTURE_URL/manifest.txt"
+
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"tar is required"* ]]
+  [[ "$(cat "$FIXTURE_SERVER_LOG")" == *"GET /manifest.txt"* ]]
+  [[ "$(cat "$FIXTURE_SERVER_LOG")" != *"GET /$archive_name"* ]]
+}
+
+@test "missing checksum tools fail before the release archive is downloaded" {
+  build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
+  local restricted_path archive_name
+  restricted_path="$(make_path_without_checksum_tool)"
+  archive_name="$(fixture_archive_name "1.19.0" "$TEST_TARGET")"
+
+  run --separate-stderr env PATH="$restricted_path" \
+    CLOUDSMITH_CLI_ALLOW_INSECURE_URLS=true \
+    "$INSTALL_SH" \
+    --version 1.19.0 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$FIXTURE_URL/manifest.txt"
+
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"sha256sum, shasum, or openssl is required"* ]]
+  [[ "$(cat "$FIXTURE_SERVER_LOG")" == *"GET /manifest.txt"* ]]
+  [[ "$(cat "$FIXTURE_SERVER_LOG")" != *"GET /$archive_name"* ]]
 }
 
 @test "BusyBox-style wget is rejected in secure mode because it cannot enforce HTTPS redirects" {

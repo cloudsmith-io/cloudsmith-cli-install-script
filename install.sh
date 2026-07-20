@@ -136,6 +136,25 @@ sha256_file() {
   fi
 }
 
+check_archive_tools() {
+  case "$ARCHIVE_NAME" in
+    *.tar.gz|*.tgz)
+      command -v tar >/dev/null 2>&1 || die "tar is required"
+      command -v gzip >/dev/null 2>&1 || die "gzip is required"
+      ;;
+    *.zip)
+      command -v unzip >/dev/null 2>&1 || die "unzip is required"
+      ;;
+    *) die "unsupported archive format: $ARCHIVE_NAME" ;;
+  esac
+
+  if ! command -v sha256sum >/dev/null 2>&1 &&
+     ! command -v shasum >/dev/null 2>&1 &&
+     ! command -v openssl >/dev/null 2>&1; then
+    die "sha256sum, shasum, or openssl is required"
+  fi
+}
+
 manifest_value() {
   awk -F= -v wanted="$1" '
     $0 !~ /^[[:space:]]*#/ && $1 == wanted {
@@ -289,13 +308,11 @@ validate_archive_listing() {
 validate_archive_entries() {
   case "$ARCHIVE_FILE" in
     *.tar.gz|*.tgz)
-      command -v tar >/dev/null 2>&1 || die "tar is required"
       tar -tvzf "$ARCHIVE_FILE" > "$WORK_DIR/archive-listing.txt"
       validate_archive_listing "$WORK_DIR/archive-listing.txt"
       tar -tzf "$ARCHIVE_FILE" > "$WORK_DIR/archive-entries.txt"
       ;;
     *.zip)
-      command -v unzip >/dev/null 2>&1 || die "unzip is required"
       unzip -Z -l "$ARCHIVE_FILE" > "$WORK_DIR/archive-listing.txt"
       validate_archive_listing "$WORK_DIR/archive-listing.txt"
       unzip -Z1 "$ARCHIVE_FILE" > "$WORK_DIR/archive-entries.txt"
@@ -383,6 +400,7 @@ main() {
     return 0
   fi
 
+  check_archive_tools
   download_archive
   stage_archive
   activate_staged_install
