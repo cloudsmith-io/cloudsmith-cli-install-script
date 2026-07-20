@@ -131,7 +131,7 @@ executable=/home/runner/.local/share/cloudsmith-cli/1.19.0/linux-x86_64-gnu/clou
 | Linux | x86-64 | `linux-x86_64-musl` | Alpine and other musl distributions |
 | Linux | Arm64 | `linux-aarch64-musl` | Alpine and other musl distributions |
 | macOS | x86-64 | `macos-x86_64` | Intel |
-| macOS | Arm64 | `macos-arm64` | Apple silicon |
+| macOS | Arm64 | `macos-arm64` | Apple silicon, including shells running under Rosetta 2 |
 | Windows | x86-64 | `windows-x86_64` | Also used on Windows Arm64 through x86-64 emulation |
 
 ## Security
