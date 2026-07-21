@@ -9,9 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Release workflow job publishing `install.sh`, `install.ps1`, and
-  `SHA256SUMS` to Cloudsmith, gated on configuration and authenticated via the
-  CLI's GitHub Actions OIDC exchange.
+- Release workflow job publishing the install scripts to Cloudsmith as
+  `cli.sh` and `cli.ps1` (with `SHA256SUMS`), gated on configuration and
+  authenticated via the CLI's GitHub Actions OIDC exchange. Served at
+  `https://install.cloudsmith.com/cli.<sh|ps1>`.
 - README instructions for installing from the published Cloudsmith URLs.
 
 ## [0.1.0] - 2026-07-16

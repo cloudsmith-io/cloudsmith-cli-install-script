@@ -261,8 +261,14 @@ jobs:
           test -n "$executable"
           echo "CLOUDSMITH_BIN=$executable" >> "$GITHUB_ENV"
 
-      - name: Generate SHA256SUMS
-        run: sha256sum install.sh install.ps1 > SHA256SUMS
+      # The scripts are published as cli.sh and cli.ps1, served at
+      # https://install.cloudsmith.com/cli.<sh|ps1>.
+      - name: Stage scripts under their published names
+        run: |
+          set -eu
+          cp install.sh cli.sh
+          cp install.ps1 cli.ps1
+          sha256sum cli.sh cli.ps1 > SHA256SUMS
 
       - name: Authenticate via GitHub OIDC
         run: |
@@ -273,7 +279,7 @@ jobs:
         run: |
           set -eu
           VERSION="${TAG#v}"
-          for file in install.sh install.ps1 SHA256SUMS; do
+          for file in cli.sh cli.ps1 SHA256SUMS; do
             "$CLOUDSMITH_BIN" push raw \
               "$CLOUDSMITH_NAMESPACE/$CLOUDSMITH_REPO" \
               "$file" \
@@ -286,7 +292,7 @@ jobs:
         run: |
           set -eu
           VERSION="${TAG#v}"
-          for file in install.sh install.ps1 SHA256SUMS; do
+          for file in cli.sh cli.ps1 SHA256SUMS; do
             url="https://dl.cloudsmith.io/public/$CLOUDSMITH_NAMESPACE/$CLOUDSMITH_REPO/raw/names/$file/versions/$VERSION/$file"
             expected="$(sha256sum "$file" | awk '{print $1}')"
             if ! actual="$(curl -fsSL "$url" | sha256sum | awk '{print $1}')"; then
