@@ -160,7 +160,15 @@ detect_target() {
     Darwin)
       case "$machine" in
         arm64|aarch64) printf '%s\n' macos-arm64 ;;
-        x86_64|amd64) printf '%s\n' macos-x86_64 ;;
+        x86_64|amd64)
+          # A translated shell reports x86_64 even when the host is Apple
+          # silicon. Prefer the native CLI binary when Rosetta 2 is detected.
+          if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
+            printf '%s\n' macos-arm64
+          else
+            printf '%s\n' macos-x86_64
+          fi
+          ;;
         *) die "unsupported macOS architecture: $machine" ;;
       esac
       ;;

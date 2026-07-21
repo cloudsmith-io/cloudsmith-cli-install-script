@@ -37,6 +37,22 @@ EOF
   chmod +x "$STUB_BIN/uname"
 }
 
+# write_sysctl_stub <native|translated|unavailable>: fakes Apple's Rosetta probe.
+write_sysctl_stub() {
+  local mode="$1"
+  cat > "$STUB_BIN/sysctl" <<EOF
+#!/usr/bin/env bash
+[ "\${1-}" = "-n" ] || exit 2
+[ "\${2-}" = "sysctl.proc_translated" ] || exit 2
+case "$mode" in
+  native) printf '%s\n' 0 ;;
+  translated) printf '%s\n' 1 ;;
+  unavailable) exit 1 ;;
+esac
+EOF
+  chmod +x "$STUB_BIN/sysctl"
+}
+
 # write_getconf_stub <gnu|fail>: "gnu" simulates glibc; "fail" forces the ldd fallback.
 write_getconf_stub() {
   local mode="$1"
@@ -72,6 +88,31 @@ write_ldd_stub() {
 
 @test "darwin/x86_64 is detected as macos-x86_64" {
   write_uname_stub Darwin x86_64
+  write_sysctl_stub native
+
+  run --separate-stderr "$INSTALL_SH" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$UNREACHABLE_MANIFEST_URL"
+
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"detected target macos-x86_64"* ]]
+}
+
+@test "darwin/x86_64 under Rosetta is detected as macos-arm64" {
+  write_uname_stub Darwin x86_64
+  write_sysctl_stub translated
+
+  run --separate-stderr "$INSTALL_SH" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$UNREACHABLE_MANIFEST_URL"
+
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"detected target macos-arm64"* ]]
+}
+
+@test "darwin/x86_64 stays macos-x86_64 when the Rosetta probe is unavailable" {
+  write_uname_stub Darwin x86_64
+  write_sysctl_stub unavailable
 
   run --separate-stderr "$INSTALL_SH" \
     --install-root "$INSTALL_ROOT" \
