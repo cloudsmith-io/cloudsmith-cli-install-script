@@ -262,7 +262,7 @@ jobs:
           echo "CLOUDSMITH_BIN=$executable" >> "$GITHUB_ENV"
 
       # The scripts are published as cli.sh and cli.ps1, served at
-      # https://install.cloudsmith.com/cli.<sh|ps1>.
+      # https://install.cloudsmith.com/raw/files/cli.<sh|ps1>.
       - name: Stage scripts under their published names
         run: |
           set -eu

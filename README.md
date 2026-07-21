@@ -64,11 +64,11 @@ Tagged releases are also published to Cloudsmith as `cli.sh` and `cli.ps1`,
 served at stable short URLs. Install the latest CLI with one command:
 
 ```sh
-curl -fsSL https://install.cloudsmith.com/cli.sh | sh
+curl -fsSL https://install.cloudsmith.com/raw/files/cli.sh | sh
 ```
 
 ```powershell
-irm https://install.cloudsmith.com/cli.ps1 | iex
+irm https://install.cloudsmith.com/raw/files/cli.ps1 | iex
 ```
 
 Both scripts install the latest CLI version by default and print the
