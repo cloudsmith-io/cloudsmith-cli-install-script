@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Rosetta 2, and support for selecting a specific CLI version or target.
 - SHA-256 verification, archive safety checks, atomic installation, and
   concurrent-install locking.
+- Preflight checks for archive and checksum tools before release archive
+  downloads.
 - Stable machine-readable output for CI/CD consumers.
 - Cross-platform test, security scanning, release, and integration-vendoring
   workflows.

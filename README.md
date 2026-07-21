@@ -76,8 +76,11 @@ requested. Concurrent installations are serialized with a lock.
 
 | Installer | Supported host | Required tools |
 | --- | --- | --- |
-| `install.sh` | Linux or macOS | `curl`, or GNU `wget` with `--https-only`; `tar`; `gzip`; and one of `sha256sum`, `shasum`, or `openssl` |
+| `install.sh` | Linux or macOS | `curl`, or GNU `wget` with `--https-only`; `tar` and `gzip` for `.tar.gz` archives or `unzip` for `.zip` archives; and one of `sha256sum`, `shasum`, or `openssl` |
 | `install.ps1` | Windows x86-64, or Windows Arm64 with x86-64 emulation | Windows PowerShell 5.1 or PowerShell 7+ |
+
+After resolving the release manifest, the shell installer checks the required
+archive and checksum tools before downloading the release archive.
 
 ## Configuration
 
