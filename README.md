@@ -58,6 +58,26 @@ sh ./install.sh --version latest
 On success, use the reported `bin_dir` to update `PATH`, or invoke the reported
 `executable` directly.
 
+### Install from Cloudsmith
+
+Tagged releases are also published to Cloudsmith at stable URLs, defaulting to
+`latest`:
+
+```sh
+curl -fsSLO https://dl.cloudsmith.io/public/cloudsmith/cloudsmith-cli-install-script/raw/names/install.sh/versions/latest/install.sh
+sh ./install.sh --version latest
+```
+
+```powershell
+Invoke-WebRequest -Uri https://dl.cloudsmith.io/public/cloudsmith/cloudsmith-cli-install-script/raw/names/install.ps1/versions/latest/install.ps1 -OutFile install.ps1
+./install.ps1 -Version latest
+```
+
+`SHA256SUMS` is published alongside at the same path pattern
+(`.../raw/names/SHA256SUMS/versions/latest/SHA256SUMS`) for verification.
+Replace `latest` with a tag's version (for example `0.1.0`) to pin a specific
+release.
+
 ## How installation works
 
 ```mermaid
