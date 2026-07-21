@@ -6,7 +6,7 @@
 set -eu
 
 PROGRAM="install.sh"
-INSTALLER_USER_AGENT="cloudsmith-cli-install-script"
+INSTALLER_USER_AGENT="cloudsmith-cli-install-script ($(uname -s 2>/dev/null || echo unknown); $(uname -m 2>/dev/null || echo unknown))"
 
 # Where releases are downloaded from. Flags and CLOUDSMITH_CLI_* environment
 # variables override the defaults; --manifest-url bypasses URL construction.

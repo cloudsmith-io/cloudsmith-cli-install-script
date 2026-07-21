@@ -107,7 +107,7 @@ executable=$bin_dir/cloudsmith"
     --manifest-url "$FIXTURE_URL/manifest.txt"
 
   [ "$status" -eq 0 ]
-  run grep -c '^User-Agent: cloudsmith-cli-install-script$' "$FIXTURE_SERVER_LOG"
+  run grep -c '^User-Agent: cloudsmith-cli-install-script (' "$FIXTURE_SERVER_LOG"
   [ "$status" -eq 0 ]
   [ "$output" -eq 2 ]
 }

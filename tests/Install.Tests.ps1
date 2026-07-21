@@ -214,7 +214,7 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
 
                 $result.ExitCode | Should -Be 0
                 $userAgentRequests = @(Get-Content -LiteralPath $script:Server.LogPath | Where-Object {
-                    $_ -eq 'User-Agent: cloudsmith-cli-install-script'
+                    $_ -like 'User-Agent: cloudsmith-cli-install-script (*'
                 })
                 $userAgentRequests.Count | Should -Be 2
             }
