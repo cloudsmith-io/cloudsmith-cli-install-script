@@ -47,6 +47,11 @@ os.chdir(served_dir)
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        with open(log_file, "a") as handle:
+            handle.write(f"User-Agent: {self.headers.get('User-Agent', '')}\n")
+        super().do_GET()
+
     def log_message(self, fmt, *args):
         with open(log_file, "a") as handle:
             handle.write((fmt % args) + "\n")

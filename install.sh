@@ -6,6 +6,7 @@
 set -eu
 
 PROGRAM="install.sh"
+INSTALLER_USER_AGENT="cloudsmith-cli-install-script ($(uname -s 2>/dev/null || echo unknown); $(uname -m 2>/dev/null || echo unknown))"
 
 # Where releases are downloaded from. Flags and CLOUDSMITH_CLI_* environment
 # variables override the defaults; --manifest-url bypasses URL construction.
@@ -102,19 +103,21 @@ http_download() {
   if command -v curl >/dev/null 2>&1; then
     if [ "$ALLOW_INSECURE_URLS" = true ]; then
       curl --fail --silent --show-error --location \
+        --user-agent "$INSTALLER_USER_AGENT" \
         --retry 3 --retry-delay 1 --connect-timeout 20 --max-time 300 \
         --output "$output" "$url"
     else
       curl --fail --silent --show-error --location \
         --proto '=https' --proto-redir '=https' \
+        --user-agent "$INSTALLER_USER_AGENT" \
         --retry 3 --retry-delay 1 --connect-timeout 20 --max-time 300 \
         --output "$output" "$url"
     fi
   elif command -v wget >/dev/null 2>&1; then
     if [ "$ALLOW_INSECURE_URLS" = true ]; then
-      wget -q -T 300 -O "$output" "$url"
+      wget -q -T 300 -U "$INSTALLER_USER_AGENT" -O "$output" "$url"
     elif wget --help 2>&1 | grep -- '--https-only' >/dev/null 2>&1; then
-      wget -q -T 300 --https-only -O "$output" "$url"
+      wget -q -T 300 --https-only -U "$INSTALLER_USER_AGENT" -O "$output" "$url"
     else
       die "secure downloads require curl or GNU wget with --https-only"
     fi

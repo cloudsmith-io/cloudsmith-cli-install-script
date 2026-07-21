@@ -54,6 +54,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     -O) output="$2"; shift 2 ;;
     -T) shift 2 ;;
+    -U) shift 2 ;;
     -q) shift ;;
     --https-only) printf '%s\n' "unexpected --https-only" >&2; exit 2 ;;
     -*) shift ;;
@@ -93,6 +94,22 @@ executable=$bin_dir/cloudsmith"
   run "$bin_dir/cloudsmith" --version
   [ "$status" -eq 0 ]
   [[ "$output" == *"CLI Package Version: 1.19.0"* ]]
+}
+
+@test "curl identifies installer requests with a custom user agent" {
+  command -v curl >/dev/null 2>&1 || skip "curl is required for this test"
+  build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
+
+  run --separate-stderr "$INSTALL_SH" \
+    --version 1.19.0 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$FIXTURE_URL/manifest.txt"
+
+  [ "$status" -eq 0 ]
+  run grep -c '^User-Agent: cloudsmith-cli-install-script (' "$FIXTURE_SERVER_LOG"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
 }
 
 @test "--help prints usage with HOME and XDG_DATA_HOME unset" {
@@ -516,6 +533,9 @@ executable=$bin_dir/cloudsmith"
   [ "$status" -eq 0 ]
   [ -x "$INSTALL_ROOT/1.19.0/$TEST_TARGET/cloudsmith/cloudsmith" ]
   [[ "$(cat "$WGET_LOG")" != *"--https-only"* ]]
+  run grep -c -- '-U cloudsmith-cli-install-script' "$WGET_LOG"
+  [ "$status" -eq 0 ]
+  [ "$output" -eq 2 ]
 }
 
 @test "http:// manifest URL without CLOUDSMITH_CLI_ALLOW_INSECURE_URLS fails" {

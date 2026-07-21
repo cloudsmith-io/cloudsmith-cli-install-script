@@ -274,6 +274,7 @@ function Start-FixtureServer {
 
     $id = [Guid]::NewGuid().ToString('N')
     $portFile = Join-Path ([System.IO.Path]::GetTempPath()) "fixture-port-$id.txt"
+    $logFile = Join-Path ([System.IO.Path]::GetTempPath()) "fixture-requests-$id.log"
     $scriptPath = Join-Path ([System.IO.Path]::GetTempPath()) "fixture-server-$id.py"
 
     $serverScript = @'
@@ -283,9 +284,15 @@ import socketserver
 import sys
 
 os.chdir(sys.argv[1])
+log_file = sys.argv[3]
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        with open(log_file, "a") as handle:
+            handle.write("User-Agent: {}\n".format(self.headers.get("User-Agent", "")))
+        super().do_GET()
+
     def log_message(self, *args):
         pass
 
@@ -297,10 +304,16 @@ httpd.serve_forever()
 '@
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($scriptPath, $serverScript, $utf8NoBom)
+    [System.IO.File]::WriteAllText($logFile, '', $utf8NoBom)
 
     $startArgs = @{
         FilePath     = $python.Source
-        ArgumentList = @('"' + $scriptPath + '"', '"' + $Directory + '"', '"' + $portFile + '"')
+        ArgumentList = @(
+            '"' + $scriptPath + '"',
+            '"' + $Directory + '"',
+            '"' + $portFile + '"',
+            '"' + $logFile + '"'
+        )
         PassThru     = $true
     }
     if ($env:OS -eq 'Windows_NT') { $startArgs['WindowStyle'] = 'Hidden' }
@@ -324,6 +337,7 @@ httpd.serve_forever()
         Url       = "http://127.0.0.1:$port"
         Directory = $Directory
         Port      = $port
+        LogPath   = $logFile
     }
     Add-Member -InputObject $server -MemberType NoteProperty -Name Process -Value $process
     Add-Member -InputObject $server -MemberType NoteProperty -Name PortFile -Value $portFile
@@ -335,6 +349,7 @@ httpd.serve_forever()
         try { Stop-Process -Id $this.Process.Id -Force -ErrorAction SilentlyContinue } catch { }
         try { Remove-Item -LiteralPath $this.PortFile -Force -ErrorAction SilentlyContinue } catch { }
         try { Remove-Item -LiteralPath $this.ScriptPath -Force -ErrorAction SilentlyContinue } catch { }
+        try { Remove-Item -LiteralPath $this.LogPath -Force -ErrorAction SilentlyContinue } catch { }
     }
 
     return $server
