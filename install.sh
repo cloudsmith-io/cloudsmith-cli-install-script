@@ -136,7 +136,7 @@ sha256_file() {
   fi
 }
 
-check_archive_tools() {
+check_required_tools() {
   case "$ARCHIVE_NAME" in
     *.tar.gz|*.tgz)
       command -v tar >/dev/null 2>&1 || die "tar is required"
@@ -400,7 +400,7 @@ main() {
     return 0
   fi
 
-  check_archive_tools
+  check_required_tools
   download_archive
   stage_archive
   activate_staged_install
