@@ -230,3 +230,78 @@ jobs:
             --repo "$TARGET_REPO" \
             --title "chore: vendor installer scripts ${TAG}" \
             --body "Vendors install.sh/install.ps1 from ${SOURCE_REPO}@${TAG} (commit ${GITHUB_SHA})."
+
+  publish-cloudsmith:
+    name: Publish to Cloudsmith
+    needs: release
+    if: ${{ vars.CLOUDSMITH_SERVICE_SLUG != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # needed for the CLI to exchange the GitHub Actions OIDC token
+    env:
+      # Consumed automatically by the CLI's GitHub Actions OIDC exchange.
+      CLOUDSMITH_ORG: ${{ vars.CLOUDSMITH_NAMESPACE }}
+      CLOUDSMITH_SERVICE_SLUG: ${{ vars.CLOUDSMITH_SERVICE_SLUG }}
+      CLOUDSMITH_NAMESPACE: ${{ vars.CLOUDSMITH_NAMESPACE }}
+      CLOUDSMITH_REPO: ${{ vars.CLOUDSMITH_REPO }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install the Cloudsmith CLI using install.sh
+        run: |
+          set -eu
+          output="$(sh ./install.sh --version latest)"
+          printf '%s\n' "$output"
+          executable="$(printf '%s\n' "$output" | grep '^executable=' | cut -d= -f2-)"
+          test -n "$executable"
+          echo "CLOUDSMITH_BIN=$executable" >> "$GITHUB_ENV"
+
+      # The scripts are published as cli.sh and cli.ps1, served at
+      # https://install.cloudsmith.com/raw/files/cli.<sh|ps1>.
+      - name: Stage scripts under their published names
+        run: |
+          set -eu
+          cp install.sh cli.sh
+          cp install.ps1 cli.ps1
+          sha256sum cli.sh cli.ps1 > SHA256SUMS
+
+      - name: Authenticate via GitHub OIDC
+        run: |
+          set -eu
+          "$CLOUDSMITH_BIN" whoami
+
+      - name: Push install scripts
+        run: |
+          set -eu
+          VERSION="${TAG#v}"
+          for file in cli.sh cli.ps1 SHA256SUMS; do
+            "$CLOUDSMITH_BIN" push raw \
+              "$CLOUDSMITH_NAMESPACE/$CLOUDSMITH_REPO" \
+              "$file" \
+              --name "$file" \
+              --version "$VERSION" \
+              --republish
+          done
+
+      - name: Verify published files
+        run: |
+          set -eu
+          VERSION="${TAG#v}"
+          for file in cli.sh cli.ps1 SHA256SUMS; do
+            url="https://dl.cloudsmith.io/public/$CLOUDSMITH_NAMESPACE/$CLOUDSMITH_REPO/raw/names/$file/versions/$VERSION/$file"
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            if ! actual="$(curl -fsSL "$url" | sha256sum | awk '{print $1}')"; then
+              echo "notice: could not download $url (repository may still be private); skipping verification"
+              continue
+            fi
+            if [ "$expected" != "$actual" ]; then
+              echo "checksum mismatch for $url" >&2
+              exit 1
+            fi
+            echo "verified $url"
+          done

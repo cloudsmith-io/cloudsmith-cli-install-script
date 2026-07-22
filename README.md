@@ -58,6 +58,29 @@ sh ./install.sh --version latest
 On success, use the reported `bin_dir` to update `PATH`, or invoke the reported
 `executable` directly.
 
+### Install from Cloudsmith
+
+Tagged releases are also published to Cloudsmith as `cli.sh` and `cli.ps1`,
+served at stable short URLs. Install the latest CLI with one command:
+
+```sh
+curl -fsSL https://install.cloudsmith.com/raw/files/cli.sh | sh
+```
+
+```powershell
+irm https://install.cloudsmith.com/raw/files/cli.ps1 | iex
+```
+
+Both scripts install the latest CLI version by default and print the
+installed `bin_dir` to add to `PATH`.
+
+To verify before running, or to pin a version, download the script and
+`SHA256SUMS` from
+`https://dl.cloudsmith.io/public/cloudsmith/cloudsmith-cli-install-script/raw/names/<name>/versions/<version|latest>/<name>`
+where `<name>` is `cli.sh`, `cli.ps1`, or `SHA256SUMS`, then run it with
+`--version X.Y.Z` (`-Version X.Y.Z` in PowerShell). Use pinned, verified
+downloads in CI.
+
 ## How installation works
 
 ```mermaid
