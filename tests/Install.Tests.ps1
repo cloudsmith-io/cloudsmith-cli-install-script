@@ -71,6 +71,13 @@ Describe 'Cloudsmith CLI installer activation retry' {
         }
 
         . ([scriptblock]::Create($retryFunction.Extent.Text))
+
+        $script:RetryDefaults = @{}
+        foreach ($parameter in $retryFunction.Body.ParamBlock.Parameters) {
+            if ($parameter.DefaultValue) {
+                $script:RetryDefaults[$parameter.Name.VariablePath.UserPath] = $parameter.DefaultValue.Extent.Text
+            }
+        }
     }
 
     BeforeEach {
@@ -127,6 +134,20 @@ Describe 'Cloudsmith CLI installer activation retry' {
         { Invoke-WithFilesystemRetry -Action $action -Attempts 5 -DelayMilliseconds 1 } |
             Should -Throw -ExceptionType ([System.InvalidOperationException])
         $script:AttemptCount | Should -Be 1
+    }
+
+    It 'keeps retrying by default for long enough to outlast an antivirus scan' {
+        $attempts = [int]$script:RetryDefaults['Attempts']
+        $delay = [int]$script:RetryDefaults['DelayMilliseconds']
+
+        (($attempts - 1) * $delay) | Should -BeGreaterOrEqual 9000
+    }
+
+    It 'rejects an attempt count that would skip the action' {
+        { Invoke-WithFilesystemRetry -Action { 'never runs' } -Attempts 0 -DelayMilliseconds 1 } |
+            Should -Throw
+        { Invoke-WithFilesystemRetry -Action { 'never runs' } -DelayMilliseconds -1 } |
+            Should -Throw
     }
 }
 
