@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The release workflow verifies the published Cloudsmith files at their
   actual download path (`raw/versions/<version>/<file>`), and a failed
   download is reported as a notice instead of a spurious checksum mismatch.
+- Windows activation retries transient access-denied errors from antivirus/
+  indexer scans instead of failing the install.
 
 ## [0.1.0] - 2026-07-30
 
