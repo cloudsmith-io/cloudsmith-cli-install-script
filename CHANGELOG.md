@@ -7,18 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The release workflow verifies the published Cloudsmith files at their
+  actual download path (`raw/versions/<version>/<file>`), and a failed
+  download is reported as a notice instead of a spurious checksum mismatch.
+
+## [0.1.0] - 2026-07-30
+
 ### Added
 
 - Release workflow job publishing the install scripts to Cloudsmith as
   `cli.sh` and `cli.ps1` (with `SHA256SUMS`), gated on configuration and
   authenticated via the CLI's GitHub Actions OIDC exchange. Served at
-  `https://install.cloudsmith.com/raw/files/cli.<sh|ps1>`.
+  `https://install.cloudsmith.com/raw/versions/latest/cli.<sh|ps1>`.
 - README instructions for installing from the published Cloudsmith URLs.
-
-## [0.1.0] - 2026-07-16
-
-### Added
-
 - Cross-platform `install.sh` and `install.ps1` installers for the standalone
   Cloudsmith CLI.
 - Automatic platform detection, including native Arm64 selection under

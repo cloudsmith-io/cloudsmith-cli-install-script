@@ -293,12 +293,13 @@ jobs:
           set -eu
           VERSION="${TAG#v}"
           for file in cli.sh cli.ps1 SHA256SUMS; do
-            url="https://dl.cloudsmith.io/public/$CLOUDSMITH_NAMESPACE/$CLOUDSMITH_REPO/raw/names/$file/versions/$VERSION/$file"
-            expected="$(sha256sum "$file" | awk '{print $1}')"
-            if ! actual="$(curl -fsSL "$url" | sha256sum | awk '{print $1}')"; then
+            url="https://dl.cloudsmith.io/public/$CLOUDSMITH_NAMESPACE/$CLOUDSMITH_REPO/raw/versions/$VERSION/$file"
+            if ! curl -fsSL "$url" -o "verify-$file"; then
               echo "notice: could not download $url (repository may still be private); skipping verification"
               continue
             fi
+            expected="$(sha256sum "$file" | awk '{print $1}')"
+            actual="$(sha256sum "verify-$file" | awk '{print $1}')"
             if [ "$expected" != "$actual" ]; then
               echo "checksum mismatch for $url" >&2
               exit 1
