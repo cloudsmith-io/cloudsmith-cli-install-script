@@ -46,6 +46,90 @@ Describe 'Cloudsmith CLI installer request metadata' {
     }
 }
 
+Describe 'Cloudsmith CLI installer activation retry' {
+
+    BeforeAll {
+        $installScriptPath = (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') 'install.ps1')).ProviderPath
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            $installScriptPath,
+            [ref]$tokens,
+            [ref]$errors
+        )
+        if ($errors.Count -gt 0) {
+            throw 'install.ps1 has parse errors'
+        }
+
+        $retryFunction = $ast.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Invoke-WithFilesystemRetry'
+        }, $true)
+        if (-not $retryFunction) {
+            throw 'unable to find Invoke-WithFilesystemRetry'
+        }
+
+        . ([scriptblock]::Create($retryFunction.Extent.Text))
+    }
+
+    BeforeEach {
+        $script:AttemptCount = 0
+    }
+
+    It 'succeeds after transient UnauthorizedAccessException errors, retrying only as needed' {
+        $action = {
+            $script:AttemptCount++
+            if ($script:AttemptCount -lt 3) {
+                throw [System.UnauthorizedAccessException]::new("Access to the path 'C:\fake' is denied.")
+            }
+            return 'moved'
+        }
+
+        $result = Invoke-WithFilesystemRetry -Action $action -Attempts 5 -DelayMilliseconds 1
+
+        $result | Should -Be 'moved'
+        $script:AttemptCount | Should -Be 3
+    }
+
+    It 'succeeds after transient IOException errors' {
+        $action = {
+            $script:AttemptCount++
+            if ($script:AttemptCount -lt 2) {
+                throw [System.IO.IOException]::new('The process cannot access the file because it is being used by another process.')
+            }
+            return 'moved'
+        }
+
+        $result = Invoke-WithFilesystemRetry -Action $action -Attempts 5 -DelayMilliseconds 1
+
+        $result | Should -Be 'moved'
+        $script:AttemptCount | Should -Be 2
+    }
+
+    It 'rethrows once retries are exhausted' {
+        $action = {
+            $script:AttemptCount++
+            throw [System.UnauthorizedAccessException]::new("Access to the path 'C:\fake' is denied.")
+        }
+
+        { Invoke-WithFilesystemRetry -Action $action -Attempts 3 -DelayMilliseconds 1 } |
+            Should -Throw -ExceptionType ([System.UnauthorizedAccessException])
+        $script:AttemptCount | Should -Be 3
+    }
+
+    It 'does not retry unrelated exception types' {
+        $action = {
+            $script:AttemptCount++
+            throw [System.InvalidOperationException]::new('not a filesystem access error')
+        }
+
+        { Invoke-WithFilesystemRetry -Action $action -Attempts 5 -DelayMilliseconds 1 } |
+            Should -Throw -ExceptionType ([System.InvalidOperationException])
+        $script:AttemptCount | Should -Be 1
+    }
+}
+
 Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $script:RunningOnWindows) {
 
     BeforeAll {
