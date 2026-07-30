@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- The release workflow verifies the published Cloudsmith files at their
-  actual download path (`raw/versions/<version>/<file>`), and a failed
-  download is reported as a notice instead of a spurious checksum mismatch.
-
 ## [0.1.0] - 2026-07-30
 
 ### Added
@@ -33,3 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stable machine-readable output for CI/CD consumers.
 - Cross-platform test, security scanning, release, and integration-vendoring
   workflows.
+
+### Fixed
+
+- The release workflow verifies the published Cloudsmith files at their
+  actual download path (`raw/versions/<version>/<file>`), and a failed
+  download is reported as a notice instead of a spurious checksum mismatch.
