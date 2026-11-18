@@ -183,6 +183,32 @@ executable=$bin_dir/cloudsmith"
   [ -x "$bin_dir/cloudsmith" ]
 }
 
+@test "major channel: --version 1 installs the 1.x release in the manifest" {
+  build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
+
+  run --separate-stderr "$INSTALL_SH" \
+    --version 1 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$FIXTURE_URL/manifest.txt"
+
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "version=1.19.0" ]
+}
+
+@test "major channel: a manifest outside the requested major version fails" {
+  build_fixture "$FIXTURE_DIR" "10.0.0" "$TEST_TARGET"
+
+  run --separate-stderr "$INSTALL_SH" \
+    --version 1 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT" \
+    --manifest-url "$FIXTURE_URL/manifest.txt"
+
+  [ "$status" -ne 0 ]
+  [[ "$stderr" == *"manifest resolved '10.0.0', expected a 1.x release"* ]]
+}
+
 @test "--output-file writes the four result lines to a file and stdout stays empty" {
   build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
   local out_file="$BATS_TEST_TMPDIR/result.txt"

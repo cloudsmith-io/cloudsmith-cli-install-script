@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `--version` (`-Version` in PowerShell) accepts a major version, such as
+  `1`. The installer then installs the latest release of that major version,
+  from the `cloudsmith-cli-v<MAJOR>-manifest-<target>` manifest.
+
 ## [0.1.2] - 2026-07-30
 
 ### Fixed

@@ -389,8 +389,13 @@ try {
     [void][System.IO.Directory]::CreateDirectory($script:WorkDir)
 
     $manifestFile = Join-Path $script:WorkDir "manifest.txt"
+    $isMajorVersion = $Version -match '^[0-9]+\z'
     if (-not $ManifestUrl) {
-        $ManifestUrl = "$DownloadBaseUrl/$Repository/raw/names/$ManifestNamePrefix-$resolvedTarget/versions/$Version/manifest.txt"
+        if ($isMajorVersion) {
+            $ManifestUrl = "$DownloadBaseUrl/$Repository/raw/names/cloudsmith-cli-v$Version-manifest-$resolvedTarget/versions/latest/manifest.txt"
+        } else {
+            $ManifestUrl = "$DownloadBaseUrl/$Repository/raw/names/$ManifestNamePrefix-$resolvedTarget/versions/$Version/manifest.txt"
+        }
     }
 
     Write-InstallerLog "fetching release manifest"
@@ -412,7 +417,11 @@ try {
     if ($manifestTarget -ne $resolvedTarget) {
         throw "install.ps1: manifest target '$manifestTarget' does not match '$resolvedTarget'"
     }
-    if ($Version -ne 'latest' -and $Version -ne $resolvedVersion) {
+    if ($isMajorVersion) {
+        if (-not $resolvedVersion.StartsWith("$Version.")) {
+            throw "install.ps1: manifest resolved '$resolvedVersion', expected a $Version.x release"
+        }
+    } elseif ($Version -ne 'latest' -and $Version -ne $resolvedVersion) {
         throw "install.ps1: manifest resolved '$resolvedVersion', expected '$Version'"
     }
     if (-not $archiveName -or $archiveName -match '[/\\]') {

@@ -339,6 +339,36 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
                 $result.StdOut[0] | Should -Be 'version=2.4.6'
             }
 
+            It 'installs the release of the requested major version' {
+                $installRoot = Join-Path $TestDrive ("root-" + [Guid]::NewGuid().ToString('N'))
+                $fixture = New-CloudsmithFixture -Directory $script:FixtureDir -Version '1.19.0' -Target $script:DefaultTarget -BaseUrl $script:Server.Url
+
+                $result = Invoke-Installer -HostExe $currentHostExe -ScriptArguments @(
+                    '-Version', '1',
+                    '-InstallRoot', $installRoot,
+                    '-Target', $script:DefaultTarget,
+                    '-ManifestUrl', $fixture.ManifestUrl
+                )
+
+                $result.ExitCode | Should -Be 0 -Because "stderr: $($result.StdErr)"
+                $result.StdOut[0] | Should -Be 'version=1.19.0'
+            }
+
+            It 'fails when the manifest is outside the requested major version' {
+                $installRoot = Join-Path $TestDrive ("root-" + [Guid]::NewGuid().ToString('N'))
+                $fixture = New-CloudsmithFixture -Directory $script:FixtureDir -Version '10.0.0' -Target $script:DefaultTarget -BaseUrl $script:Server.Url
+
+                $result = Invoke-Installer -HostExe $currentHostExe -ScriptArguments @(
+                    '-Version', '1',
+                    '-InstallRoot', $installRoot,
+                    '-Target', $script:DefaultTarget,
+                    '-ManifestUrl', $fixture.ManifestUrl
+                )
+
+                $result.ExitCode | Should -Not -Be 0
+                $result.StdErr | Should -Match "manifest resolved '10\.0\.0', expected a 1\.x release"
+            }
+
             It 'writes exactly four lines to -OutputFile (UTF-8, no BOM) and leaves stdout empty' {
                 $installRoot = Join-Path $TestDrive ("root-" + [Guid]::NewGuid().ToString('N'))
                 $outputFile = Join-Path $TestDrive ("out-" + [Guid]::NewGuid().ToString('N') + '.txt')
