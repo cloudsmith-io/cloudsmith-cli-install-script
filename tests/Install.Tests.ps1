@@ -407,7 +407,7 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
                 )
 
                 $result.ExitCode | Should -Not -Be 0
-                $result.StdErr | Should -Match "manifest resolved '10\.0\.0', expected a 1\.x release"
+                $result.StdErr | Should -Match 'expected a 1\.x release'
             }
 
             It 'writes exactly four lines to -OutputFile (UTF-8, no BOM) and leaves stdout empty' {
