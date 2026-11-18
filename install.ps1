@@ -197,6 +197,18 @@ function Invoke-HttpsDownload {
     }
 }
 
+function Get-DefaultManifestUrl {
+    param(
+        [Parameter(Mandatory = $true)][string]$RequestedVersion,
+        [Parameter(Mandatory = $true)][string]$Target
+    )
+
+    if ($RequestedVersion -match '^[0-9]+\z') {
+        return "$DownloadBaseUrl/$Repository/raw/names/cloudsmith-cli-v$RequestedVersion-manifest-$Target/versions/latest/manifest.txt"
+    }
+    return "$DownloadBaseUrl/$Repository/raw/names/$ManifestNamePrefix-$Target/versions/$RequestedVersion/manifest.txt"
+}
+
 function Invoke-Download {
     param(
         [Parameter(Mandatory = $true)][string]$Uri,
@@ -389,8 +401,9 @@ try {
     [void][System.IO.Directory]::CreateDirectory($script:WorkDir)
 
     $manifestFile = Join-Path $script:WorkDir "manifest.txt"
+    $isMajorVersion = $Version -match '^[0-9]+\z'
     if (-not $ManifestUrl) {
-        $ManifestUrl = "$DownloadBaseUrl/$Repository/raw/names/$ManifestNamePrefix-$resolvedTarget/versions/$Version/manifest.txt"
+        $ManifestUrl = Get-DefaultManifestUrl -RequestedVersion $Version -Target $resolvedTarget
     }
 
     Write-InstallerLog "fetching release manifest"
@@ -412,7 +425,11 @@ try {
     if ($manifestTarget -ne $resolvedTarget) {
         throw "install.ps1: manifest target '$manifestTarget' does not match '$resolvedTarget'"
     }
-    if ($Version -ne 'latest' -and $Version -ne $resolvedVersion) {
+    if ($isMajorVersion) {
+        if (-not $resolvedVersion.StartsWith("$Version.")) {
+            throw "install.ps1: manifest resolved '$resolvedVersion', expected a $Version.x release"
+        }
+    } elseif ($Version -ne 'latest' -and $Version -ne $resolvedVersion) {
         throw "install.ps1: manifest resolved '$resolvedVersion', expected '$Version'"
     }
     if (-not $archiveName -or $archiveName -match '[/\\]') {

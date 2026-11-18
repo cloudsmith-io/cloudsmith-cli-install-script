@@ -33,7 +33,7 @@ usage() {
   cat <<'USAGE'
 Usage: install.sh [options]
 
-  --version VERSION       CLI version, or "latest"
+  --version VERSION       CLI version, major version such as "1", or "latest"
   --install-root DIR      Versioned installation root
   --target TARGET         Override target detection
   --output-file FILE      Write key=value installation results
@@ -218,10 +218,31 @@ detect_target() {
   esac
 }
 
+is_major_version() {
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+}
+
+check_resolved_version() {
+  if [ "$REQUESTED_VERSION" = latest ]; then
+    return 0
+  fi
+  if is_major_version "$REQUESTED_VERSION"; then
+    case "$RESOLVED_VERSION" in
+      "$REQUESTED_VERSION".*) return 0 ;;
+    esac
+    die "manifest resolved '$RESOLVED_VERSION', expected a $REQUESTED_VERSION.x release"
+  fi
+  [ "$REQUESTED_VERSION" = "$RESOLVED_VERSION" ] || die "manifest resolved '$RESOLVED_VERSION', expected '$REQUESTED_VERSION'"
+}
+
 fetch_manifest() {
   MANIFEST_FILE="$WORK_DIR/manifest.txt"
   if [ -z "$MANIFEST_URL" ]; then
-    MANIFEST_URL="$DOWNLOAD_BASE_URL/$REPOSITORY/raw/names/$MANIFEST_NAME_PREFIX-$TARGET/versions/$REQUESTED_VERSION/manifest.txt"
+    if is_major_version "$REQUESTED_VERSION"; then
+      MANIFEST_URL="$DOWNLOAD_BASE_URL/$REPOSITORY/raw/names/cloudsmith-cli-v$REQUESTED_VERSION-manifest-$TARGET/versions/latest/manifest.txt"
+    else
+      MANIFEST_URL="$DOWNLOAD_BASE_URL/$REPOSITORY/raw/names/$MANIFEST_NAME_PREFIX-$TARGET/versions/$REQUESTED_VERSION/manifest.txt"
+    fi
   fi
   require_https "$MANIFEST_URL" "manifest URL"
   log "fetching release manifest"
@@ -239,7 +260,7 @@ validate_manifest() {
   [ "$SCHEMA" = 1 ] || die "unsupported manifest schema: ${SCHEMA:-missing}"
   case "$RESOLVED_VERSION" in ''|.|..|*[!A-Za-z0-9._+-]*) die "manifest contains an invalid version" ;; esac
   [ "$MANIFEST_TARGET" = "$TARGET" ] || die "manifest target '$MANIFEST_TARGET' does not match '$TARGET'"
-  [ "$REQUESTED_VERSION" = latest ] || [ "$REQUESTED_VERSION" = "$RESOLVED_VERSION" ] || die "manifest resolved '$RESOLVED_VERSION', expected '$REQUESTED_VERSION'"
+  check_resolved_version
   case "$ARCHIVE_NAME" in ''|*/*|*\\*) die "manifest contains an invalid archive name" ;; esac
   [ -n "$ARCHIVE_URL" ] || die "manifest is missing url"
   case "$EXPECTED_SHA256" in ''|*[!0-9a-f]*) die "manifest contains an invalid SHA-256" ;; esac
