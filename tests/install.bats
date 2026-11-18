@@ -209,6 +209,26 @@ executable=$bin_dir/cloudsmith"
   [[ "$stderr" == *"manifest resolved '10.0.0', expected a 1.x release"* ]]
 }
 
+@test "major channel: --version 1 requests the manifest of the 1.x channel" {
+  local stub_bin="$BATS_TEST_TMPDIR/bin"
+  mkdir -p "$stub_bin"
+  cat > "$stub_bin/curl" <<'STUB'
+#!/usr/bin/env bash
+for arg; do :; done
+printf '%s\n' "$arg" > "$BATS_TEST_TMPDIR/requested-url"
+exit 22
+STUB
+  chmod +x "$stub_bin/curl"
+
+  run --separate-stderr env PATH="$stub_bin:$PATH" BATS_TEST_TMPDIR="$BATS_TEST_TMPDIR" "$INSTALL_SH" \
+    --version 1 \
+    --target "$TEST_TARGET" \
+    --install-root "$INSTALL_ROOT"
+
+  [ "$status" -ne 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/requested-url")" = "https://dl.cloudsmith.io/public/cloudsmith/cli/raw/names/cloudsmith-cli-v1-manifest-$TEST_TARGET/versions/latest/manifest.txt" ]
+}
+
 @test "--output-file writes the four result lines to a file and stdout stays empty" {
   build_fixture "$FIXTURE_DIR" "1.19.0" "$TEST_TARGET"
   local out_file="$BATS_TEST_TMPDIR/result.txt"

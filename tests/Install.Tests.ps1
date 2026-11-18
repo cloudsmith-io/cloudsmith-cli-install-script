@@ -46,6 +46,47 @@ Describe 'Cloudsmith CLI installer request metadata' {
     }
 }
 
+Describe 'Cloudsmith CLI installer manifest URL' {
+
+    BeforeAll {
+        $installScriptPath = (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') 'install.ps1')).ProviderPath
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            $installScriptPath,
+            [ref]$tokens,
+            [ref]$errors
+        )
+        if ($errors.Count -gt 0) {
+            throw 'install.ps1 has parse errors'
+        }
+
+        $urlFunction = $ast.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Get-DefaultManifestUrl'
+        }, $true)
+        if (-not $urlFunction) {
+            throw 'unable to find Get-DefaultManifestUrl'
+        }
+
+        $script:DownloadBaseUrl = 'https://dl.cloudsmith.io/public'
+        $script:ManifestNamePrefix = 'cloudsmith-cli-manifest'
+        $script:Repository = 'cloudsmith/cli'
+        . ([scriptblock]::Create($urlFunction.Extent.Text))
+    }
+
+    It 'uses the manifest of the major version channel for a major version' {
+        Get-DefaultManifestUrl -RequestedVersion '1' -Target 'windows-x86_64' |
+            Should -Be 'https://dl.cloudsmith.io/public/cloudsmith/cli/raw/names/cloudsmith-cli-v1-manifest-windows-x86_64/versions/latest/manifest.txt'
+    }
+
+    It 'uses the version path of the latest channel for an exact version' {
+        Get-DefaultManifestUrl -RequestedVersion '1.2.3' -Target 'windows-x86_64' |
+            Should -Be 'https://dl.cloudsmith.io/public/cloudsmith/cli/raw/names/cloudsmith-cli-manifest-windows-x86_64/versions/1.2.3/manifest.txt'
+    }
+}
+
 Describe 'Cloudsmith CLI installer activation retry' {
 
     BeforeAll {

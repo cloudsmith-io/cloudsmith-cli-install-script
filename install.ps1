@@ -197,6 +197,18 @@ function Invoke-HttpsDownload {
     }
 }
 
+function Get-DefaultManifestUrl {
+    param(
+        [Parameter(Mandatory = $true)][string]$RequestedVersion,
+        [Parameter(Mandatory = $true)][string]$Target
+    )
+
+    if ($RequestedVersion -match '^[0-9]+\z') {
+        return "$DownloadBaseUrl/$Repository/raw/names/cloudsmith-cli-v$RequestedVersion-manifest-$Target/versions/latest/manifest.txt"
+    }
+    return "$DownloadBaseUrl/$Repository/raw/names/$ManifestNamePrefix-$Target/versions/$RequestedVersion/manifest.txt"
+}
+
 function Invoke-Download {
     param(
         [Parameter(Mandatory = $true)][string]$Uri,
@@ -391,11 +403,7 @@ try {
     $manifestFile = Join-Path $script:WorkDir "manifest.txt"
     $isMajorVersion = $Version -match '^[0-9]+\z'
     if (-not $ManifestUrl) {
-        if ($isMajorVersion) {
-            $ManifestUrl = "$DownloadBaseUrl/$Repository/raw/names/cloudsmith-cli-v$Version-manifest-$resolvedTarget/versions/latest/manifest.txt"
-        } else {
-            $ManifestUrl = "$DownloadBaseUrl/$Repository/raw/names/$ManifestNamePrefix-$resolvedTarget/versions/$Version/manifest.txt"
-        }
+        $ManifestUrl = Get-DefaultManifestUrl -RequestedVersion $Version -Target $resolvedTarget
     }
 
     Write-InstallerLog "fetching release manifest"
