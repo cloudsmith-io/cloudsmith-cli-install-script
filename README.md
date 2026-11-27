@@ -81,6 +81,14 @@ where `<file>` is `cli.sh`, `cli.ps1`, or `SHA256SUMS`, then run it with
 `--version X.Y.Z` (`-Version X.Y.Z` in PowerShell). Use pinned, verified
 downloads in CI.
 
+Download the script and `SHA256SUMS` from the same `<version>` path. The
+`latest` path resolves each file separately, so for a short time after a
+release the two files can come from different releases.
+
+To stay on one major version, set `--version` to that major version, for
+example `--version 1` (`-Version 1` in PowerShell). The installer then
+installs the latest 1.x release, and never a 2.x release.
+
 ## How installation works
 
 ```mermaid
@@ -111,7 +119,7 @@ Command-line options take precedence over environment variables.
 
 | Shell option | PowerShell parameter | Environment variable | Default |
 | --- | --- | --- | --- |
-| `--version` | `-Version` | `CLOUDSMITH_CLI_VERSION` | `latest` |
+| `--version` | `-Version` | `CLOUDSMITH_CLI_VERSION` | `latest`. Also accepts `X.Y.Z` or a major version such as `1` |
 | `--install-root` | `-InstallRoot` | `CLOUDSMITH_CLI_INSTALL_ROOT` | Shell: `$XDG_DATA_HOME/cloudsmith-cli` or `~/.local/share/cloudsmith-cli`<br>PowerShell: `%LOCALAPPDATA%\Cloudsmith\CLI` |
 | `--target` | `-Target` | `CLOUDSMITH_CLI_TARGET` | Automatically detected |
 | `--output-file` | `-OutputFile` | `CLOUDSMITH_CLI_OUTPUT_FILE` | Standard output |

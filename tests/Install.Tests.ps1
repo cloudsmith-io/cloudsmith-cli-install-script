@@ -46,6 +46,47 @@ Describe 'Cloudsmith CLI installer request metadata' {
     }
 }
 
+Describe 'Cloudsmith CLI installer manifest URL' {
+
+    BeforeAll {
+        $installScriptPath = (Resolve-Path (Join-Path (Join-Path $PSScriptRoot '..') 'install.ps1')).ProviderPath
+        $tokens = $null
+        $errors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+            $installScriptPath,
+            [ref]$tokens,
+            [ref]$errors
+        )
+        if ($errors.Count -gt 0) {
+            throw 'install.ps1 has parse errors'
+        }
+
+        $urlFunction = $ast.Find({
+            param($node)
+            $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -eq 'Get-DefaultManifestUrl'
+        }, $true)
+        if (-not $urlFunction) {
+            throw 'unable to find Get-DefaultManifestUrl'
+        }
+
+        $script:DownloadBaseUrl = 'https://dl.cloudsmith.io/public'
+        $script:ManifestNamePrefix = 'cloudsmith-cli-manifest'
+        $script:Repository = 'cloudsmith/cli'
+        . ([scriptblock]::Create($urlFunction.Extent.Text))
+    }
+
+    It 'uses the manifest of the major version channel for a major version' {
+        Get-DefaultManifestUrl -RequestedVersion '1' -Target 'windows-x86_64' |
+            Should -Be 'https://dl.cloudsmith.io/public/cloudsmith/cli/raw/names/cloudsmith-cli-v1-manifest-windows-x86_64/versions/latest/manifest.txt'
+    }
+
+    It 'uses the version path of the latest channel for an exact version' {
+        Get-DefaultManifestUrl -RequestedVersion '1.2.3' -Target 'windows-x86_64' |
+            Should -Be 'https://dl.cloudsmith.io/public/cloudsmith/cli/raw/names/cloudsmith-cli-manifest-windows-x86_64/versions/1.2.3/manifest.txt'
+    }
+}
+
 Describe 'Cloudsmith CLI installer activation retry' {
 
     BeforeAll {
@@ -337,6 +378,36 @@ Describe 'Cloudsmith CLI installer (install.ps1)' -Tag 'Windows' -Skip:(-not $sc
 
                 $result.ExitCode | Should -Be 0
                 $result.StdOut[0] | Should -Be 'version=2.4.6'
+            }
+
+            It 'installs the release of the requested major version' {
+                $installRoot = Join-Path $TestDrive ("root-" + [Guid]::NewGuid().ToString('N'))
+                $fixture = New-CloudsmithFixture -Directory $script:FixtureDir -Version '1.19.0' -Target $script:DefaultTarget -BaseUrl $script:Server.Url
+
+                $result = Invoke-Installer -HostExe $currentHostExe -ScriptArguments @(
+                    '-Version', '1',
+                    '-InstallRoot', $installRoot,
+                    '-Target', $script:DefaultTarget,
+                    '-ManifestUrl', $fixture.ManifestUrl
+                )
+
+                $result.ExitCode | Should -Be 0 -Because "stderr: $($result.StdErr)"
+                $result.StdOut[0] | Should -Be 'version=1.19.0'
+            }
+
+            It 'fails when the manifest is outside the requested major version' {
+                $installRoot = Join-Path $TestDrive ("root-" + [Guid]::NewGuid().ToString('N'))
+                $fixture = New-CloudsmithFixture -Directory $script:FixtureDir -Version '10.0.0' -Target $script:DefaultTarget -BaseUrl $script:Server.Url
+
+                $result = Invoke-Installer -HostExe $currentHostExe -ScriptArguments @(
+                    '-Version', '1',
+                    '-InstallRoot', $installRoot,
+                    '-Target', $script:DefaultTarget,
+                    '-ManifestUrl', $fixture.ManifestUrl
+                )
+
+                $result.ExitCode | Should -Not -Be 0
+                $result.StdErr | Should -Match 'expected a 1\.x release'
             }
 
             It 'writes exactly four lines to -OutputFile (UTF-8, no BOM) and leaves stdout empty' {
